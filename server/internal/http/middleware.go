@@ -59,7 +59,7 @@ func CORSMiddleware(allowedOrigins []string) Middleware {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Vary", "Origin")
 				}
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Device-ID, X-Device-Key")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			}
 			if r.Method == http.MethodOptions {
