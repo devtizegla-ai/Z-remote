@@ -22,7 +22,8 @@ const ui = createUI();
 setState({
   settings: loadSettings(),
   tokens: loadTokens(),
-  user: loadUser()
+  user: loadUser(),
+  serverReachable: null
 });
 
 ui.showTab("login");
@@ -34,6 +35,7 @@ ui.render();
 
 bindBaseEvents();
 bindWSHandlers();
+startServerHealthMonitor();
 
 if (state.tokens?.access_token) {
   bootstrapWithExistingToken();
@@ -55,6 +57,7 @@ async function bootstrapWithExistingToken() {
 function bindBaseEvents() {
   ui.elements.tabLogin.addEventListener("click", () => ui.showTab("login"));
   ui.elements.tabRegister.addEventListener("click", () => ui.showTab("register"));
+  ui.elements.authSettingsBtn.addEventListener("click", () => ui.showSettings(true));
 
   ui.elements.loginForm.addEventListener("submit", onLogin);
   ui.elements.registerForm.addEventListener("submit", onRegister);
@@ -154,6 +157,7 @@ function bindWSHandlers() {
 
 async function onLogin(event) {
   event.preventDefault();
+  await checkServerHealth();
   try {
     const payload = await apiRequest("/api/auth/login", {
       method: "POST",
@@ -172,12 +176,13 @@ async function onLogin(event) {
 
     ui.log("Login realizado");
   } catch (error) {
-    ui.log(`Falha no login: ${error.message}`);
+    ui.log(`Falha no login: ${humanizeNetworkError(error)}`);
   }
 }
 
 async function onRegister(event) {
   event.preventDefault();
+  await checkServerHealth();
   try {
     await apiRequest("/api/auth/register", {
       method: "POST",
@@ -190,7 +195,7 @@ async function onRegister(event) {
     ui.log("Cadastro concluído. Faça login para continuar.");
     ui.showTab("login");
   } catch (error) {
-    ui.log(`Falha no cadastro: ${error.message}`);
+    ui.log(`Falha no cadastro: ${humanizeNetworkError(error)}`);
   }
 }
 
@@ -305,6 +310,7 @@ function onSaveSettings() {
   setState({ settings: updated });
   ui.showSettings(false);
   ui.log("Configurações salvas");
+  checkServerHealth();
 }
 
 function logout() {
@@ -326,5 +332,29 @@ function logout() {
   });
 
   ui.log("Sessão encerrada");
+}
+
+function startServerHealthMonitor() {
+  checkServerHealth();
+  setInterval(checkServerHealth, 20000);
+}
+
+async function checkServerHealth() {
+  try {
+    await apiRequest("/health", { method: "GET", retry: false, timeoutMs: 20000 });
+    setState({ serverReachable: true });
+    return true;
+  } catch {
+    setState({ serverReachable: false });
+    return false;
+  }
+}
+
+function humanizeNetworkError(error) {
+  const message = error?.message || String(error);
+  if (message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("abort")) {
+    return "Servidor indisponível ou iniciando (Render free pode levar até ~1 min). Tente novamente.";
+  }
+  return message;
 }
 

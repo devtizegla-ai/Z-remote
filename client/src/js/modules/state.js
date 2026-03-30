@@ -7,6 +7,7 @@ export const state = {
   device: null,
   devices: [],
   wsConnected: false,
+  serverReachable: null,
   pendingRequest: null,
   activeSession: null,
   incomingFiles: []

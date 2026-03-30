@@ -11,10 +11,10 @@ export async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${state.tokens.access_token}`;
   }
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     ...options,
     headers
-  });
+  }, options.timeoutMs || 45000);
 
   if (!response.ok) {
     let message = `Erro HTTP ${response.status}`;
@@ -37,5 +37,27 @@ export async function apiRequest(path, options = {}) {
   }
 
   return response.blob();
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  async function runOnce() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  try {
+    return await runOnce();
+  } catch (error) {
+    if (options.retry === false) {
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+    return runOnce();
+  }
 }
 

@@ -8,6 +8,7 @@ export function createUI() {
     appSection: document.getElementById("appSection"),
     tabLogin: document.getElementById("tabLogin"),
     tabRegister: document.getElementById("tabRegister"),
+    authSettingsBtn: document.getElementById("authSettingsBtn"),
     loginForm: document.getElementById("loginForm"),
     loginEmail: document.getElementById("loginEmail"),
     loginPassword: document.getElementById("loginPassword"),
@@ -117,9 +118,16 @@ export function createUI() {
     elements.authSection.classList.toggle("hidden", logged);
     elements.appSection.classList.toggle("hidden", !logged);
 
-    elements.connectionBadge.textContent = state.wsConnected ? "Online" : "Offline";
-    elements.connectionBadge.classList.toggle("connected", state.wsConnected);
-    elements.connectionBadge.classList.toggle("disconnected", !state.wsConnected);
+    if (logged) {
+      elements.connectionBadge.textContent = state.wsConnected ? "Sessao Online" : "Sessao Offline";
+      elements.connectionBadge.classList.toggle("connected", state.wsConnected);
+      elements.connectionBadge.classList.toggle("disconnected", !state.wsConnected);
+    } else {
+      const serverReady = state.serverReachable === true;
+      elements.connectionBadge.textContent = serverReady ? "Servidor OK" : "Servidor Indisponivel";
+      elements.connectionBadge.classList.toggle("connected", serverReady);
+      elements.connectionBadge.classList.toggle("disconnected", !serverReady);
+    }
 
     elements.userLabel.textContent = state.user?.name || "Usuário";
     elements.deviceLabel.textContent = state.device?.device_name || "Dispositivo";
