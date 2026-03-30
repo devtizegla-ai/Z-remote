@@ -42,7 +42,9 @@ func main() {
 	}
 
 	migrationsDir := filepath.Join("migrations")
-	if err := store.ExecMigrations(context.Background(), migrationsDir); err != nil {
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer migrationCancel()
+	if err := store.ExecMigrations(migrationCtx, migrationsDir); err != nil {
 		log.Fatalf("migration error: %v", err)
 	}
 

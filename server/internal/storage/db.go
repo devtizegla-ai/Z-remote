@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,47 +80,43 @@ func (s *Store) ExecMigrations(ctx context.Context, migrationsDir string) error 
 	sort.Strings(migrationNames)
 
 	for _, migrationName := range migrationNames {
+		runCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+
 		var appliedCount int
 		if err := s.DB.QueryRowContext(
-			ctx,
+			runCtx,
 			`SELECT COUNT(1) FROM schema_migrations WHERE name = ?`,
 			migrationName,
 		).Scan(&appliedCount); err != nil {
+			cancel()
 			return fmt.Errorf("check migration %s: %w", migrationName, err)
 		}
 		if appliedCount > 0 {
+			cancel()
 			continue
 		}
 
 		path := filepath.Join(migrationsDir, migrationName)
 		sqlBytes, err := os.ReadFile(path)
 		if err != nil {
+			cancel()
 			return fmt.Errorf("read migration %s: %w", migrationName, err)
 		}
-
-		tx, err := s.DB.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin migration %s: %w", migrationName, err)
-		}
-
-		if _, err := tx.ExecContext(ctx, string(sqlBytes)); err != nil {
-			_ = tx.Rollback()
+		if _, err := s.DB.ExecContext(runCtx, string(sqlBytes)); err != nil {
+			cancel()
 			return fmt.Errorf("exec migration %s: %w", migrationName, err)
 		}
-
-		if _, err := tx.ExecContext(
-			ctx,
+		if _, err := s.DB.ExecContext(
+			runCtx,
 			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
 			migrationName,
 			NowUTC(),
 		); err != nil {
-			_ = tx.Rollback()
+			cancel()
 			return fmt.Errorf("record migration %s: %w", migrationName, err)
 		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %s: %w", migrationName, err)
-		}
+		cancel()
+		log.Printf("migration applied: %s", migrationName)
 	}
 
 	return nil
