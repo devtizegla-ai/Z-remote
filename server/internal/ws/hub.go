@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -70,7 +71,17 @@ func NewHub(tokens *auth.TokenManager, devicesService *devices.Service, sessions
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	deviceID := r.URL.Query().Get("device_id")
-	token, deviceKey := parseAuthFromSubprotocols(websocket.Subprotocols(r))
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	deviceKey := strings.TrimSpace(r.URL.Query().Get("device_key"))
+	if token == "" || deviceKey == "" {
+		subToken, subDeviceKey := parseAuthFromSubprotocols(websocket.Subprotocols(r))
+		if token == "" {
+			token = subToken
+		}
+		if deviceKey == "" {
+			deviceKey = subDeviceKey
+		}
+	}
 
 	if token == "" || deviceID == "" || deviceKey == "" {
 		http.Error(w, "token, device_id and device_key are required", http.StatusBadRequest)
@@ -300,8 +311,13 @@ func parseAuthFromSubprotocols(values []string) (token string, deviceKey string)
 }
 
 func isTauriOrigin(origin string) bool {
-	return strings.HasPrefix(origin, "tauri://") ||
-		strings.HasSuffix(origin, ".tauri.localhost") ||
-		origin == "http://tauri.localhost" ||
-		origin == "https://tauri.localhost"
+	if strings.HasPrefix(origin, "tauri://") {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "tauri.localhost" || strings.HasSuffix(host, ".tauri.localhost")
 }

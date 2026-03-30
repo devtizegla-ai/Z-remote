@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 )
@@ -72,10 +73,15 @@ func CORSMiddleware(allowedOrigins []string) Middleware {
 }
 
 func isTauriOrigin(origin string) bool {
-	return strings.HasPrefix(origin, "tauri://") ||
-		strings.HasSuffix(origin, ".tauri.localhost") ||
-		origin == "http://tauri.localhost" ||
-		origin == "https://tauri.localhost"
+	if strings.HasPrefix(origin, "tauri://") {
+		return true
+	}
+	parsed, err := neturl.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "tauri.localhost" || strings.HasSuffix(host, ".tauri.localhost")
 }
 
 type statusWriter struct {

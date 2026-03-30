@@ -31,8 +31,13 @@ class WSClient {
     this.autoReconnect = true;
 
     const wsBase = state.settings.serverUrl.replace("http://", "ws://").replace("https://", "wss://");
-    const url = `${wsBase}/ws?device_id=${encodeURIComponent(state.device.id)}`;
-    const protocols = [`access.${state.tokens.access_token}`, `dkey.${getDeviceAuthKey()}`];
+    const accessToken = state.tokens.access_token;
+    const deviceKey = getDeviceAuthKey();
+    const url =
+      `${wsBase}/ws?device_id=${encodeURIComponent(state.device.id)}` +
+      `&token=${encodeURIComponent(accessToken)}` +
+      `&device_key=${encodeURIComponent(deviceKey)}`;
+    const protocols = [`access.${accessToken}`, `dkey.${deviceKey}`];
     const socket = new WebSocket(url, protocols);
     this.socket = socket;
 
