@@ -4,9 +4,31 @@ const USER_KEY = "ra_mvp_user";
 const DEVICE_KEY = "ra_mvp_device_id";
 const DEVICE_AUTH_KEY = "ra_mvp_device_auth_key";
 
+export function normalizeServerUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  let normalized = raw;
+  if (!/^https?:\/\//i.test(normalized)) {
+    if (
+      normalized.startsWith("localhost") ||
+      normalized.startsWith("127.0.0.1") ||
+      normalized.startsWith("0.0.0.0")
+    ) {
+      normalized = `http://${normalized}`;
+    } else {
+      normalized = `https://${normalized}`;
+    }
+  }
+
+  return normalized.replace(/\/+$/, "");
+}
+
 export function getDefaultSettings() {
   return {
-    serverUrl: import.meta.env.VITE_SERVER_URL || "http://localhost:8080",
+    serverUrl: normalizeServerUrl(import.meta.env.VITE_SERVER_URL || "http://localhost:8080"),
     deviceName: `Device-${Math.random().toString(36).slice(2, 6)}`,
     autoStartPrepared: false
   };
@@ -16,14 +38,22 @@ export function loadSettings() {
   const defaults = getDefaultSettings();
   try {
     const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-    return { ...defaults, ...parsed };
+    return {
+      ...defaults,
+      ...parsed,
+      serverUrl: normalizeServerUrl(parsed.serverUrl || defaults.serverUrl)
+    };
   } catch {
     return defaults;
   }
 }
 
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  const normalized = {
+    ...settings,
+    serverUrl: normalizeServerUrl(settings.serverUrl)
+  };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
 }
 
 export function loadTokens() {

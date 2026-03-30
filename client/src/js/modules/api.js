@@ -1,8 +1,10 @@
-import { getDeviceAuthKey, getDeviceId } from "./config.js";
+import { getDeviceAuthKey, getDeviceId, normalizeServerUrl } from "./config.js";
 import { state } from "./state.js";
 
 export async function apiRequest(path, options = {}) {
-  const url = `${state.settings.serverUrl}${path}`;
+  const baseUrl = normalizeServerUrl(state.settings.serverUrl);
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${baseUrl}${normalizedPath}`;
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {})

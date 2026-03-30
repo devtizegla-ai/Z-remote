@@ -8,6 +8,7 @@ import {
   loadSettings,
   loadTokens,
   loadUser,
+  normalizeServerUrl,
   saveSettings,
   saveTokens,
   saveUser
@@ -340,10 +341,10 @@ async function onDownloadTransfer(transferId) {
 
 function onSaveSettings() {
   const previous = state.settings || {};
-  const serverUrl = ui.elements.settingsServerUrl.value.trim();
+  const serverUrl = normalizeServerUrl(ui.elements.settingsServerUrl.value.trim());
   const deviceName = ui.elements.settingsDeviceName.value.trim();
   const updated = {
-    serverUrl: serverUrl || previous.serverUrl,
+    serverUrl: serverUrl || normalizeServerUrl(previous.serverUrl),
     deviceName: deviceName || previous.deviceName,
     autoStartPrepared: ui.elements.settingsAutoStart.checked
   };

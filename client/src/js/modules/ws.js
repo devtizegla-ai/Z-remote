@@ -1,4 +1,4 @@
-import { getDeviceAuthKey } from "./config.js";
+import { getDeviceAuthKey, normalizeServerUrl } from "./config.js";
 import { state, setState } from "./state.js";
 
 class WSClient {
@@ -30,14 +30,23 @@ class WSClient {
 
     this.autoReconnect = true;
 
-    const wsBase = state.settings.serverUrl.replace("http://", "ws://").replace("https://", "wss://");
+    const httpBase = normalizeServerUrl(state.settings.serverUrl);
+    const wsBase = httpBase.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
     const accessToken = state.tokens.access_token;
     const deviceKey = getDeviceAuthKey();
-    const url =
-      `${wsBase}/ws?device_id=${encodeURIComponent(state.device.id)}` +
-      `&token=${encodeURIComponent(accessToken)}` +
-      `&device_key=${encodeURIComponent(deviceKey)}`;
-    const socket = new WebSocket(url);
+    const wsUrl = new URL("/ws", `${wsBase}/`);
+    wsUrl.searchParams.set("device_id", state.device.id);
+    wsUrl.searchParams.set("token", accessToken);
+    wsUrl.searchParams.set("device_key", deviceKey);
+
+    const protocols = [
+      "ra.v1",
+      `did.${state.device.id}`,
+      `access.${accessToken}`,
+      `dkey.${deviceKey}`
+    ];
+
+    const socket = new WebSocket(wsUrl.toString(), protocols);
     this.socket = socket;
 
     socket.onopen = () => {
