@@ -1,19 +1,21 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Remote Access MVP</title>
+    <title>Z Remote</title>
     <link rel="stylesheet" href="/src/css/style.css" />
   </head>
   <body>
-    <div class="bg-orb orb-a"></div>
-    <div class="bg-orb orb-b"></div>
+    <div class="bg-grid"></div>
 
     <header class="topbar">
-      <div>
-        <h1>Remote Access MVP</h1>
-        <p class="muted">Acesso remoto assistido com fallback relay</p>
+      <div class="brand-wrap">
+        <div class="brand-logo">ZR</div>
+        <div>
+          <h1>Z Remote</h1>
+          <p class="muted">Remote desktop relay - RustDesk-like UX</p>
+        </div>
       </div>
       <div id="connectionBadge" class="badge disconnected">Offline</div>
     </header>
@@ -49,27 +51,43 @@
       <section id="appSection" class="panel app-panel hidden">
         <aside class="sidebar">
           <div>
-            <h2 id="userLabel">Usuário</h2>
+            <h2 id="userLabel">Usuario</h2>
             <p class="muted" id="deviceLabel">Dispositivo</p>
           </div>
+          <div class="my-id-box">
+            <label>Seu ID</label>
+            <div class="my-id-row">
+              <code id="myDeviceId">-</code>
+              <button id="copyDeviceIdBtn" class="btn btn-ghost">Copiar</button>
+            </div>
+          </div>
           <button id="refreshDevicesBtn" class="btn">Atualizar dispositivos</button>
-          <button id="openSettingsBtn" class="btn">Configurações</button>
+          <button id="openSettingsBtn" class="btn">Configuracoes</button>
           <button id="logoutBtn" class="btn btn-danger">Sair</button>
         </aside>
 
         <section class="content">
+          <div class="card quick-connect-card">
+            <h3>Conexao Rapida</h3>
+            <p class="muted">Digite o ID remoto para solicitar conexao direta.</p>
+            <div class="quick-connect-row">
+              <input id="partnerIdInput" type="text" placeholder="ID do parceiro (dev_local_xxx)" />
+              <button id="connectByIdBtn" class="btn btn-primary">Conectar</button>
+            </div>
+          </div>
+
           <div class="card">
             <h3>Dispositivos online</h3>
             <div id="devicesList" class="devices-grid"></div>
           </div>
 
           <div id="sessionCard" class="card hidden">
-            <h3>Sessão remota</h3>
+            <h3>Sessao remota</h3>
             <div class="session-meta" id="sessionMeta"></div>
             <div class="session-actions">
               <button id="startShareBtn" class="btn btn-primary">Iniciar compartilhamento (host)</button>
               <button id="stopShareBtn" class="btn">Parar compartilhamento</button>
-              <button id="endSessionBtn" class="btn btn-danger">Encerrar sessão</button>
+              <button id="endSessionBtn" class="btn btn-danger">Encerrar sessao</button>
             </div>
             <div class="viewer-wrap">
               <img id="remoteFrame" alt="Tela remota" tabindex="0" />
@@ -86,7 +104,7 @@
           </div>
 
           <div class="card">
-            <h3>Logs de conexão</h3>
+            <h3>Logs de conexao</h3>
             <div id="logsList" class="logs"></div>
           </div>
         </section>
@@ -95,7 +113,7 @@
 
     <div id="settingsModal" class="modal hidden">
       <div class="modal-content">
-        <h3>Configurações</h3>
+        <h3>Configuracoes</h3>
         <label>URL do servidor</label>
         <input id="settingsServerUrl" type="text" />
         <label>Nome do dispositivo</label>
@@ -113,7 +131,7 @@
 
     <div id="requestModal" class="modal hidden">
       <div class="modal-content">
-        <h3>Solicitação de conexão</h3>
+        <h3>Solicitacao de conexao</h3>
         <p id="requestModalText"></p>
         <div class="modal-actions">
           <button id="acceptRequestBtn" class="btn btn-primary">Aceitar</button>
@@ -125,4 +143,3 @@
     <script type="module" src="/src/js/app.js"></script>
   </body>
 </html>
-

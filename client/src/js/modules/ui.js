@@ -21,6 +21,10 @@ export function createUI() {
     connectionBadge: document.getElementById("connectionBadge"),
     userLabel: document.getElementById("userLabel"),
     deviceLabel: document.getElementById("deviceLabel"),
+    myDeviceId: document.getElementById("myDeviceId"),
+    copyDeviceIdBtn: document.getElementById("copyDeviceIdBtn"),
+    partnerIdInput: document.getElementById("partnerIdInput"),
+    connectByIdBtn: document.getElementById("connectByIdBtn"),
     logsList: document.getElementById("logsList"),
     sessionCard: document.getElementById("sessionCard"),
     sessionMeta: document.getElementById("sessionMeta"),
@@ -94,7 +98,8 @@ export function createUI() {
       title.textContent = `${ownerPrefix}${device.device_name}`;
       const details = document.createElement("p");
       details.className = "muted";
-      details.textContent = `${device.machine_name || "host"} - ${device.platform} - ${device.status}`;
+      details.textContent =
+        `${device.machine_name || "host"} - ${device.platform} - ${device.status} - ID: ${device.id}`;
       info.appendChild(title);
       info.appendChild(details);
       card.appendChild(info);
@@ -151,6 +156,7 @@ export function createUI() {
 
     elements.userLabel.textContent = state.user?.name || "Usuario";
     elements.deviceLabel.textContent = state.device?.device_name || "Dispositivo";
+    elements.myDeviceId.textContent = state.device?.id || "-";
 
     const hasSession = Boolean(state.activeSession);
     elements.sessionCard.classList.toggle("hidden", !hasSession);

@@ -78,6 +78,14 @@ function bindBaseEvents() {
   ui.elements.registerForm.addEventListener("submit", onRegister);
   ui.elements.refreshDevicesBtn.addEventListener("click", refreshDevices);
   ui.elements.logoutBtn.addEventListener("click", logout);
+  ui.elements.connectByIdBtn.addEventListener("click", onConnectById);
+  ui.elements.partnerIdInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onConnectById();
+    }
+  });
+  ui.elements.copyDeviceIdBtn.addEventListener("click", onCopyMyId);
 
   ui.elements.startShareBtn.addEventListener("click", async () => {
     try {
@@ -324,17 +332,48 @@ async function refreshDevices() {
 }
 
 async function onConnectToDevice(device) {
+  return requestConnectionToDevice(device?.id, device?.device_name || "dispositivo");
+}
+
+async function onConnectById() {
+  const targetId = (ui.elements.partnerIdInput.value || "").trim();
+  if (!targetId) {
+    ui.log("Informe o ID do parceiro para conectar");
+    return;
+  }
+  await requestConnectionToDevice(targetId, targetId);
+}
+
+async function requestConnectionToDevice(targetDeviceID, targetLabel) {
+  if (!targetDeviceID) {
+    ui.log("ID de dispositivo invalido");
+    return;
+  }
   try {
     const response = await apiRequest("/api/sessions/request", {
       method: "POST",
       body: JSON.stringify({
-        target_device_id: device.id
+        target_device_id: targetDeviceID
       })
     });
     const request = response.session_request;
-    ui.log(`Solicitacao enviada para ${device.device_name} (${request.id})`);
+    ui.log(`Solicitacao enviada para ${targetLabel} (${request.id})`);
   } catch (error) {
     ui.log(`Falha ao solicitar conexao: ${error.message}`);
+  }
+}
+
+async function onCopyMyId() {
+  const deviceID = state.device?.id;
+  if (!deviceID) {
+    ui.log("ID do dispositivo ainda nao disponivel");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(deviceID);
+    ui.log("ID copiado para area de transferencia");
+  } catch {
+    ui.log(`Seu ID: ${deviceID}`);
   }
 }
 
