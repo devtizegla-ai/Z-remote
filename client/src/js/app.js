@@ -82,6 +82,7 @@ function bindBaseEvents() {
     }
   });
   ui.elements.stopShareBtn.addEventListener("click", () => stopHostSharing(ui.log));
+  ui.elements.endSessionBtn.addEventListener("click", onEndSession);
 
   ui.elements.sendFileBtn.addEventListener("click", onSendFile);
 
@@ -146,6 +147,13 @@ function bindWSHandlers() {
 
   wsClient.on("session_signal", async (message) => {
     await handleSessionSignal(message, ui.log, ui.setRemoteFrame);
+  });
+
+  wsClient.on("session_ended", ({ session, ended_by_device_id: endedBy } = {}) => {
+    if (!session?.id || !state.activeSession || state.activeSession.id !== session.id) {
+      return;
+    }
+    cleanupActiveSession(`Sessao encerrada por ${endedBy || "peer"}`);
   });
 
   wsClient.on("file_available", ({ file }) => {
@@ -330,6 +338,26 @@ async function onSendFile() {
   }
 }
 
+async function onEndSession() {
+  if (!state.activeSession) {
+    ui.log("Nenhuma sessao ativa para encerrar");
+    return;
+  }
+
+  try {
+    await apiRequest("/api/sessions/end", {
+      method: "POST",
+      body: JSON.stringify({
+        session_id: state.activeSession.id,
+        session_token: state.activeSession.session_token
+      })
+    });
+    cleanupActiveSession("Sessao encerrada");
+  } catch (error) {
+    ui.log(`Falha ao encerrar sessao: ${error.message}`);
+  }
+}
+
 async function onDownloadTransfer(transferId) {
   try {
     await downloadTransfer(transferId);
@@ -375,6 +403,16 @@ function logout() {
   });
 
   ui.log("Sessao encerrada");
+}
+
+function cleanupActiveSession(message) {
+  stopHostSharing(ui.log);
+  unbindControllerInput();
+  setState({
+    activeSession: null,
+    incomingFiles: []
+  });
+  ui.log(message);
 }
 
 function startServerHealthMonitor() {

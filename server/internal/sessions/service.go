@@ -19,6 +19,7 @@ var (
 	ErrSessionNotFound        = errors.New("remote session not found")
 	ErrSessionUnauthorized    = errors.New("not authorized for this session")
 	ErrSessionExpired         = errors.New("session expired")
+	ErrSessionNotActive       = errors.New("session is not active")
 )
 
 type Notifier interface {
@@ -280,45 +281,16 @@ func (s *Service) ListByUser(ctx context.Context, userID string) ([]models.Remot
 }
 
 func (s *Service) ValidateSessionParticipant(ctx context.Context, sessionID, sessionToken, deviceID string) (models.RemoteSession, string, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT id, requester_device_id, target_device_id, session_token, status, started_at, ended_at, created_at, token_expires_at
-		FROM remote_sessions
-		WHERE id = ?`, sessionID)
-
-	var session models.RemoteSession
-	var startedAt sql.NullTime
-	var endedAt sql.NullTime
-	var tokenExpiresAt time.Time
-	if err := row.Scan(
-		&session.ID,
-		&session.RequesterDeviceID,
-		&session.TargetDeviceID,
-		&session.SessionToken,
-		&session.Status,
-		&startedAt,
-		&endedAt,
-		&session.CreatedAt,
-		&tokenExpiresAt,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return models.RemoteSession{}, "", ErrSessionNotFound
-		}
+	session, tokenExpiresAt, err := s.getSessionByID(ctx, sessionID)
+	if err != nil {
 		return models.RemoteSession{}, "", err
-	}
-	if startedAt.Valid {
-		t := startedAt.Time
-		session.StartedAt = &t
-	}
-	if endedAt.Valid {
-		t := endedAt.Time
-		session.EndedAt = &t
 	}
 
 	if session.SessionToken != sessionToken {
 		return models.RemoteSession{}, "", ErrSessionUnauthorized
 	}
 	if session.Status != "active" {
-		return models.RemoteSession{}, "", fmt.Errorf("session is not active")
+		return models.RemoteSession{}, "", ErrSessionNotActive
 	}
 	if storage.NowUTC().After(tokenExpiresAt) {
 		return models.RemoteSession{}, "", ErrSessionExpired
@@ -332,6 +304,59 @@ func (s *Service) ValidateSessionParticipant(ctx context.Context, sessionID, ses
 	default:
 		return models.RemoteSession{}, "", ErrSessionUnauthorized
 	}
+}
+
+func (s *Service) End(ctx context.Context, userID, deviceID, sessionID, sessionToken string) (models.RemoteSession, error) {
+	if sessionID == "" || sessionToken == "" {
+		return models.RemoteSession{}, fmt.Errorf("session_id and session_token are required")
+	}
+
+	owned, err := s.devicesService.BelongsToUser(ctx, deviceID, userID)
+	if err != nil {
+		return models.RemoteSession{}, err
+	}
+	if !owned {
+		return models.RemoteSession{}, ErrSessionUnauthorized
+	}
+
+	session, _, err := s.ValidateSessionParticipant(ctx, sessionID, sessionToken, deviceID)
+	if err != nil {
+		return models.RemoteSession{}, err
+	}
+
+	now := storage.NowUTC()
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE remote_sessions SET status = 'ended', ended_at = ? WHERE id = ? AND status = 'active'`,
+		now,
+		sessionID,
+	)
+	if err != nil {
+		return models.RemoteSession{}, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return models.RemoteSession{}, ErrSessionNotActive
+	}
+
+	session.Status = "ended"
+	session.EndedAt = &now
+
+	s.logAudit(ctx, userID, deviceID, "remote_session_ended", map[string]any{
+		"session_id": session.ID,
+	})
+
+	if s.notifier != nil {
+		payload := map[string]any{
+			"type":               "session_ended",
+			"ended_by_device_id": deviceID,
+			"session":            session,
+		}
+		_ = s.notifier.NotifyDevice(session.RequesterDeviceID, payload)
+		_ = s.notifier.NotifyDevice(session.TargetDeviceID, payload)
+	}
+
+	return session, nil
 }
 
 func (s *Service) GetRequestByID(ctx context.Context, requestID string) (models.SessionRequest, error) {
@@ -359,6 +384,44 @@ func (s *Service) GetRequestByID(ctx context.Context, requestID string) (models.
 		request.RespondedAt = &t
 	}
 	return request, nil
+}
+
+func (s *Service) getSessionByID(ctx context.Context, sessionID string) (models.RemoteSession, time.Time, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, requester_device_id, target_device_id, session_token, status, started_at, ended_at, created_at, token_expires_at
+		FROM remote_sessions
+		WHERE id = ?`, sessionID)
+
+	var session models.RemoteSession
+	var startedAt sql.NullTime
+	var endedAt sql.NullTime
+	var tokenExpiresAt time.Time
+	if err := row.Scan(
+		&session.ID,
+		&session.RequesterDeviceID,
+		&session.TargetDeviceID,
+		&session.SessionToken,
+		&session.Status,
+		&startedAt,
+		&endedAt,
+		&session.CreatedAt,
+		&tokenExpiresAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.RemoteSession{}, time.Time{}, ErrSessionNotFound
+		}
+		return models.RemoteSession{}, time.Time{}, err
+	}
+	if startedAt.Valid {
+		t := startedAt.Time
+		session.StartedAt = &t
+	}
+	if endedAt.Valid {
+		t := endedAt.Time
+		session.EndedAt = &t
+	}
+
+	return session, tokenExpiresAt, nil
 }
 
 func (s *Service) logAudit(ctx context.Context, userID, deviceID, action string, metadata map[string]any) {

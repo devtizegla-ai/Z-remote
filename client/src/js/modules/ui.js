@@ -41,6 +41,7 @@ export function createUI() {
     logoutBtn: document.getElementById("logoutBtn"),
     startShareBtn: document.getElementById("startShareBtn"),
     stopShareBtn: document.getElementById("stopShareBtn"),
+    endSessionBtn: document.getElementById("endSessionBtn"),
     fileInput: document.getElementById("fileInput"),
     sendFileBtn: document.getElementById("sendFileBtn"),
     acceptRequestBtn: document.getElementById("acceptRequestBtn"),

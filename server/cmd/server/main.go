@@ -83,6 +83,7 @@ func main() {
 		SessionsRequest: authMW(http.HandlerFunc(sessionsHandler.Request)),
 		SessionsRespond: authMW(http.HandlerFunc(sessionsHandler.Respond)),
 		SessionsStart:   authMW(http.HandlerFunc(sessionsHandler.Start)),
+		SessionsEnd:     authMW(http.HandlerFunc(sessionsHandler.End)),
 		SessionsList:    authMW(http.HandlerFunc(sessionsHandler.List)),
 		FilesUpload:     authMW(http.HandlerFunc(filesHandler.Upload)),
 		FilesDownload:   authMW(http.HandlerFunc(filesHandler.Download)),

@@ -16,6 +16,7 @@ type RouteHandlers struct {
 	SessionsRequest nethttp.Handler
 	SessionsRespond nethttp.Handler
 	SessionsStart   nethttp.Handler
+	SessionsEnd     nethttp.Handler
 	SessionsList    nethttp.Handler
 	FilesUpload     nethttp.Handler
 	FilesDownload   nethttp.Handler
@@ -36,6 +37,7 @@ func NewRouter(cfg config.Config, handlers RouteHandlers) nethttp.Handler {
 	mux.Handle("/api/sessions/request", methodHandler(nethttp.MethodPost, handlers.SessionsRequest))
 	mux.Handle("/api/sessions/respond", methodHandler(nethttp.MethodPost, handlers.SessionsRespond))
 	mux.Handle("/api/sessions/start", methodHandler(nethttp.MethodPost, handlers.SessionsStart))
+	mux.Handle("/api/sessions/end", methodHandler(nethttp.MethodPost, handlers.SessionsEnd))
 	mux.Handle("/api/sessions", methodHandler(nethttp.MethodGet, handlers.SessionsList))
 
 	mux.Handle("/api/files/upload", methodHandler(nethttp.MethodPost, handlers.FilesUpload))

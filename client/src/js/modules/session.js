@@ -71,9 +71,15 @@ export function stopHostSharing(log) {
 export function bindControllerInput(frameEl, log) {
   unbindControllerInput();
   frameEl.tabIndex = 0;
+  frameEl.style.cursor = "crosshair";
+
+  let lastMoveSentAt = 0;
 
   const sendMouse = (eventType, event) => {
     const rect = frameEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return;
+    }
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
     wsClient.sendSessionSignal("input", {
@@ -85,10 +91,25 @@ export function bindControllerInput(frameEl, log) {
     });
   };
 
-  const onMove = (e) => sendMouse("mouse_move", e);
-  const onDown = (e) => sendMouse("mouse_down", e);
-  const onUp = (e) => sendMouse("mouse_up", e);
+  const onMove = (e) => {
+    const now = Date.now();
+    if (now - lastMoveSentAt < 33) {
+      return;
+    }
+    lastMoveSentAt = now;
+    sendMouse("mouse_move", e);
+  };
+  const onDown = (e) => {
+    e.preventDefault();
+    frameEl.focus();
+    sendMouse("mouse_down", e);
+  };
+  const onUp = (e) => {
+    e.preventDefault();
+    sendMouse("mouse_up", e);
+  };
   const onKeyDown = (e) => {
+    e.preventDefault();
     wsClient.sendSessionSignal("input", {
       event_type: "key_down",
       key: e.key,
@@ -96,10 +117,20 @@ export function bindControllerInput(frameEl, log) {
     });
   };
   const onKeyUp = (e) => {
+    e.preventDefault();
     wsClient.sendSessionSignal("input", {
       event_type: "key_up",
       key: e.key,
       code: e.code
+    });
+  };
+  const onContextMenu = (e) => e.preventDefault();
+  const onWheel = (e) => {
+    e.preventDefault();
+    wsClient.sendSessionSignal("input", {
+      event_type: "mouse_wheel",
+      delta_x: e.deltaX,
+      delta_y: e.deltaY
     });
   };
 
@@ -108,16 +139,20 @@ export function bindControllerInput(frameEl, log) {
   frameEl.addEventListener("mouseup", onUp);
   frameEl.addEventListener("keydown", onKeyDown);
   frameEl.addEventListener("keyup", onKeyUp);
+  frameEl.addEventListener("contextmenu", onContextMenu);
+  frameEl.addEventListener("wheel", onWheel, { passive: false });
 
   runtime.inputHandlers = [
     ["mousemove", onMove],
     ["mousedown", onDown],
     ["mouseup", onUp],
     ["keydown", onKeyDown],
-    ["keyup", onKeyUp]
+    ["keyup", onKeyUp],
+    ["contextmenu", onContextMenu],
+    ["wheel", onWheel]
   ];
 
-  log("Captura de input remoto habilitada (controller)");
+  log("Captura de input remoto habilitada (controller). Clique na tela remota para focar teclado.");
 }
 
 export function unbindControllerInput() {
