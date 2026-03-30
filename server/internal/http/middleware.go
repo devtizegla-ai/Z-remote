@@ -52,7 +52,7 @@ func CORSMiddleware(allowedOrigins []string) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 			if origin != "" {
-				if _, ok := allowed[origin]; ok || len(allowed) == 0 || allowAll {
+				if _, ok := allowed[origin]; ok || len(allowed) == 0 || allowAll || isTauriOrigin(origin) {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Vary", "Origin")
 				}
@@ -66,6 +66,12 @@ func CORSMiddleware(allowedOrigins []string) Middleware {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func isTauriOrigin(origin string) bool {
+	return strings.HasPrefix(origin, "tauri://") ||
+		strings.HasSuffix(origin, ".tauri.localhost") ||
+		strings.Contains(origin, "tauri.localhost")
 }
 
 type statusWriter struct {
