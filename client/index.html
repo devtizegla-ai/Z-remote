@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Z Remote</title>
+    <title>Z-Remote</title>
     <link rel="stylesheet" href="/src/css/style.css" />
   </head>
   <body>
@@ -11,9 +11,9 @@
 
     <header class="topbar">
       <div class="brand-wrap">
-        <div class="brand-logo">ZR</div>
+        <img class="brand-logo-image" src="/branding/zegla-logo-header.png" alt="Zegla" />
         <div>
-          <h1>Z Remote</h1>
+          <h1>Z-Remote</h1>
           <p class="muted">Modelo de autenticacao por dispositivo (estilo RustDesk)</p>
         </div>
       </div>
@@ -74,7 +74,10 @@
                   <button id="endSessionBtn" class="btn btn-danger">Encerrar sessao</button>
                   <div class="menu-inline-file">
                     <label for="targetSavePathInput">Destino no remoto</label>
-                    <input id="targetSavePathInput" type="text" placeholder="Ex: C:\\Users\\Public\\Downloads" />
+                    <div class="remote-path-row">
+                      <input id="targetSavePathInput" type="text" placeholder="Nenhuma pasta selecionada" readonly />
+                      <button id="pickRemoteFolderBtn" class="btn">Escolher pasta remota</button>
+                    </div>
                   </div>
                   <div class="menu-inline-file">
                     <input id="fileInput" type="file" />
@@ -127,6 +130,22 @@
         <div class="modal-actions">
           <button id="acceptRequestBtn" class="btn btn-primary">Aceitar</button>
           <button id="rejectRequestBtn" class="btn btn-danger">Rejeitar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="remoteFolderModal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Escolher pasta remota</h3>
+        <p id="remoteFolderPath" class="muted">Carregando...</p>
+        <div class="modal-actions">
+          <button id="remoteFolderUpBtn" class="btn">Subir</button>
+          <button id="remoteFolderRefreshBtn" class="btn">Atualizar</button>
+        </div>
+        <div id="remoteFolderList" class="folder-list"></div>
+        <div class="modal-actions">
+          <button id="remoteFolderSelectBtn" class="btn btn-primary">Usar pasta atual</button>
+          <button id="remoteFolderCancelBtn" class="btn">Cancelar</button>
         </div>
       </div>
     </div>

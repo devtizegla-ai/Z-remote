@@ -23,6 +23,13 @@ export function createUI() {
     remoteFrame: document.getElementById("remoteFrame"),
     requestModal: document.getElementById("requestModal"),
     requestModalText: document.getElementById("requestModalText"),
+    remoteFolderModal: document.getElementById("remoteFolderModal"),
+    remoteFolderPath: document.getElementById("remoteFolderPath"),
+    remoteFolderList: document.getElementById("remoteFolderList"),
+    remoteFolderUpBtn: document.getElementById("remoteFolderUpBtn"),
+    remoteFolderRefreshBtn: document.getElementById("remoteFolderRefreshBtn"),
+    remoteFolderSelectBtn: document.getElementById("remoteFolderSelectBtn"),
+    remoteFolderCancelBtn: document.getElementById("remoteFolderCancelBtn"),
     incomingFiles: document.getElementById("incomingFiles"),
     settingsModal: document.getElementById("settingsModal"),
     settingsServerUrl: document.getElementById("settingsServerUrl"),
@@ -40,6 +47,7 @@ export function createUI() {
     endSessionBtn: document.getElementById("endSessionBtn"),
     fileInput: document.getElementById("fileInput"),
     targetSavePathInput: document.getElementById("targetSavePathInput"),
+    pickRemoteFolderBtn: document.getElementById("pickRemoteFolderBtn"),
     sendFileBtn: document.getElementById("sendFileBtn"),
     acceptRequestBtn: document.getElementById("acceptRequestBtn"),
     rejectRequestBtn: document.getElementById("rejectRequestBtn")
@@ -153,13 +161,16 @@ export function createUI() {
       elements.sendFileBtn.disabled = false;
       elements.fileInput.disabled = false;
       elements.targetSavePathInput.disabled = !isController;
+      elements.pickRemoteFolderBtn.disabled = !isController;
       elements.targetSavePathInput.placeholder = isController
-        ? "Ex: C:\\Users\\Public\\Downloads"
+        ? "Escolha a pasta remota no botao ao lado"
         : "Destino definido pelo controlador";
     } else {
       elements.remoteFrame.removeAttribute("src");
       elements.incomingFiles.innerHTML = "";
       elements.targetSavePathInput.disabled = true;
+      elements.pickRemoteFolderBtn.disabled = true;
+      elements.targetSavePathInput.value = "";
       elements.sendFileBtn.disabled = true;
       elements.fileInput.disabled = true;
     }

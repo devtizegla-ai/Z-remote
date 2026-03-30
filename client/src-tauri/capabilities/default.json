@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the Remote Access MVP desktop client",
+  "description": "Default capability for the Z-Remote desktop client",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

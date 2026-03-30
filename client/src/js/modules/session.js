@@ -178,6 +178,16 @@ export function bindControllerInput(frameEl, log) {
   };
   const onKeyDown = (e) => {
     e.preventDefault();
+    if (e.isComposing) {
+      return;
+    }
+    if (isPrintableInputKey(e)) {
+      wsClient.sendSessionSignal("input", {
+        event_type: "text_input",
+        text: e.key
+      });
+      return;
+    }
     wsClient.sendSessionSignal("input", {
       event_type: "key_down",
       key: e.key,
@@ -186,6 +196,9 @@ export function bindControllerInput(frameEl, log) {
   };
   const onKeyUp = (e) => {
     e.preventDefault();
+    if (e.isComposing || isPrintableInputKey(e)) {
+      return;
+    }
     wsClient.sendSessionSignal("input", {
       event_type: "key_up",
       key: e.key,
@@ -251,4 +264,13 @@ export async function handleSessionSignal(message, log, setRemoteFrame) {
       log(`Falha ao aplicar input no host: ${error.message || error}`);
     }
   }
+}
+
+function isPrintableInputKey(event) {
+  if (!event?.key || event.key.length !== 1) {
+    return false;
+  }
+  const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
+  const hasBlockingModifier = event.ctrlKey || event.metaKey || (event.altKey && !altGraph);
+  return !hasBlockingModifier;
 }

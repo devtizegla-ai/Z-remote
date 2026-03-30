@@ -16,6 +16,21 @@ struct RuntimeInfo {
     mac_address: String,
 }
 
+#[derive(Serialize)]
+struct RemoteDirectoryEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+}
+
+#[derive(Serialize)]
+struct RemoteDirectoryListing {
+    current_path: String,
+    parent_path: Option<String>,
+    is_virtual_root: bool,
+    entries: Vec<RemoteDirectoryEntry>,
+}
+
 #[tauri::command]
 fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
     let machine_name = hostname::get()
@@ -102,6 +117,68 @@ fn save_download_file_to_path(
 }
 
 #[tauri::command]
+fn pick_directory_path() -> Result<Option<String>, String> {
+    let selected = rfd::FileDialog::new().pick_folder();
+    Ok(selected.map(|path| path.display().to_string()))
+}
+
+#[tauri::command]
+fn list_directory_entries(path: Option<String>) -> Result<RemoteDirectoryListing, String> {
+    let requested = path.unwrap_or_default().trim().to_string();
+
+    #[cfg(target_os = "windows")]
+    if requested.is_empty() {
+        return Ok(list_windows_root_listing());
+    }
+
+    let base_path = if requested.is_empty() {
+        default_downloads_dir()
+    } else {
+        PathBuf::from(&requested)
+    };
+
+    if !base_path.exists() {
+        return Err(format!("path does not exist: {}", base_path.display()));
+    }
+    if !base_path.is_dir() {
+        return Err(format!("path is not a directory: {}", base_path.display()));
+    }
+
+    let mut entries = Vec::new();
+    let iter = fs::read_dir(&base_path).map_err(|e| format!("failed to read directory: {e}"))?;
+    for entry_result in iter {
+        let entry = entry_result.map_err(|e| format!("failed to read directory entry: {e}"))?;
+        let entry_path = entry.path();
+        if !entry_path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().trim().to_string();
+        if name.is_empty() {
+            continue;
+        }
+        entries.push(RemoteDirectoryEntry {
+            name,
+            path: entry_path.display().to_string(),
+            is_dir: true,
+        });
+    }
+    entries.sort_by_key(|item| item.name.to_lowercase());
+
+    let mut parent = base_path.parent().map(|p| p.display().to_string());
+    #[cfg(target_os = "windows")]
+    if parent.is_none() {
+        parent = Some(String::new());
+    }
+
+    Ok(RemoteDirectoryListing {
+        current_path: base_path.display().to_string(),
+        parent_path: parent,
+        is_virtual_root: false,
+        entries,
+    })
+}
+
+#[tauri::command]
 fn apply_input_event(app: tauri::AppHandle, event: Value) -> Result<(), String> {
     if !event.is_object() {
         return Err("invalid input event payload".to_string());
@@ -128,7 +205,7 @@ fn apply_input_event(app: tauri::AppHandle, event: Value) -> Result<(), String> 
                 .move_mouse(x, y, Coordinate::Abs)
                 .map_err(|e| format!("mouse move failed: {e}"))?;
 
-            let button = parse_mouse_button(event.get("button"));
+            let button = parse_mouse_button(event.get("button"), is_host_mouse_buttons_swapped());
             let direction = if event_type == "mouse_down" {
                 Direction::Press
             } else {
@@ -161,6 +238,15 @@ fn apply_input_event(app: tauri::AppHandle, event: Value) -> Result<(), String> 
             enigo
                 .key(mapped_key, direction)
                 .map_err(|e| format!("keyboard event failed: {e}"))?;
+        }
+        "text_input" => {
+            let text = event.get("text").and_then(Value::as_str).unwrap_or("");
+            if text.is_empty() {
+                return Err("text_input requires non-empty text".to_string());
+            }
+            enigo
+                .text(text)
+                .map_err(|e| format!("text input failed: {e}"))?;
         }
         _ => {
             return Err(format!("unsupported event_type: {event_type}"));
@@ -196,12 +282,33 @@ fn normalized_to_screen(app: &tauri::AppHandle, event: &Value) -> Result<(i32, i
     Ok((screen_x, screen_y))
 }
 
-fn parse_mouse_button(value: Option<&Value>) -> Button {
-    match value.and_then(Value::as_i64).unwrap_or(0) {
+fn parse_mouse_button(value: Option<&Value>, swapped: bool) -> Button {
+    let mut button = value.and_then(Value::as_i64).unwrap_or(0);
+    if swapped {
+        button = match button {
+            0 => 2,
+            2 => 0,
+            _ => button,
+        };
+    }
+    match button {
         1 => Button::Middle,
         2 => Button::Right,
         _ => Button::Left,
     }
+}
+
+#[cfg(target_os = "windows")]
+fn is_host_mouse_buttons_swapped() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON};
+
+    // SAFETY: GetSystemMetrics is a pure Win32 query with no pointer arguments.
+    unsafe { GetSystemMetrics(SM_SWAPBUTTON) != 0 }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_host_mouse_buttons_swapped() -> bool {
+    false
 }
 
 fn map_key(key: &str, code: &str) -> Option<Key> {
@@ -304,6 +411,28 @@ fn default_downloads_dir() -> PathBuf {
     std::env::temp_dir()
 }
 
+#[cfg(target_os = "windows")]
+fn list_windows_root_listing() -> RemoteDirectoryListing {
+    let mut entries = Vec::new();
+    for letter in 'A'..='Z' {
+        let drive_path = format!("{letter}:\\");
+        if Path::new(&drive_path).exists() {
+            entries.push(RemoteDirectoryEntry {
+                name: drive_path.clone(),
+                path: drive_path,
+                is_dir: true,
+            });
+        }
+    }
+
+    RemoteDirectoryListing {
+        current_path: String::new(),
+        parent_path: None,
+        is_virtual_root: true,
+        entries,
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -311,6 +440,8 @@ pub fn run() {
             capture_primary_screen_jpeg,
             save_download_file,
             save_download_file_to_path,
+            pick_directory_path,
+            list_directory_entries,
             apply_input_event
         ])
         .run(tauri::generate_context!())
