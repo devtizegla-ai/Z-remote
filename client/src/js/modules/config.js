@@ -11,6 +11,19 @@ function generateUUIDCompat() {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
 }
 
+function generateDeviceID9Digits() {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return String(values[0] % 1_000_000_000).padStart(9, "0");
+  }
+  return String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, "0");
+}
+
+function isDeviceID9Digits(value) {
+  return /^\d{9}$/.test(String(value || "").trim());
+}
+
 export function normalizeServerUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -96,11 +109,11 @@ export function clearUser() {
 }
 
 export function getDeviceId() {
-  const existing = localStorage.getItem(DEVICE_KEY);
-  if (existing) {
+  const existing = (localStorage.getItem(DEVICE_KEY) || "").trim();
+  if (isDeviceID9Digits(existing)) {
     return existing;
   }
-  const newId = `dev_local_${generateUUIDCompat()}`;
+  const newId = generateDeviceID9Digits();
   localStorage.setItem(DEVICE_KEY, newId);
   return newId;
 }

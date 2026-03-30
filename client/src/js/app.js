@@ -360,6 +360,10 @@ async function onConnectById() {
     ui.log("Informe o ID do parceiro para conectar");
     return;
   }
+  if (!/^\d{9}$/.test(targetId)) {
+    ui.log("ID invalido. Use exatamente 9 digitos numericos.");
+    return;
+  }
   await requestConnectionToDevice(targetId, targetId);
 }
 
