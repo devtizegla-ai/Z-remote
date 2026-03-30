@@ -94,7 +94,10 @@ function bindBaseEvents() {
 
 function bindWSHandlers() {
   wsClient.on("open", () => ui.log("Canal WebSocket conectado"));
-  wsClient.on("close", () => ui.log("Canal WebSocket desconectado"));
+  wsClient.on("close", ({ code, reason } = {}) => {
+    const suffix = code ? ` (code=${code}${reason ? `, reason=${reason}` : ""})` : "";
+    ui.log(`Canal WebSocket desconectado${suffix}`);
+  });
   wsClient.on("error", (error) => ui.log(error.message));
 
   wsClient.on("session_request", ({ request }) => {

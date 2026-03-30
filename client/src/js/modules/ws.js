@@ -48,13 +48,13 @@ class WSClient {
       this.emit("open", null);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.socket !== socket) {
         return;
       }
       this.socket = null;
       setState({ wsConnected: false });
-      this.emit("close", null);
+      this.emit("close", { code: event.code, reason: event.reason || "" });
       setTimeout(() => {
         if (this.autoReconnect && !this.socket && state.tokens?.access_token) {
           this.connect();
