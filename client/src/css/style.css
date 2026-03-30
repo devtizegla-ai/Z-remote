@@ -115,6 +115,25 @@ p {
   display: flex;
 }
 
+.auth-message {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(8, 12, 16, 0.45);
+  color: var(--muted);
+}
+
+.auth-message.error {
+  border-color: rgba(255, 95, 87, 0.45);
+  color: #ff918b;
+}
+
+.auth-message.success {
+  border-color: rgba(22, 196, 127, 0.45);
+  color: #79f4c0;
+}
+
 input,
 button,
 progress {

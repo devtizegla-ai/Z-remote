@@ -57,7 +57,9 @@ async function bootstrapWithExistingToken() {
 function bindBaseEvents() {
   ui.elements.tabLogin.addEventListener("click", () => ui.showTab("login"));
   ui.elements.tabRegister.addEventListener("click", () => ui.showTab("register"));
-  ui.elements.authSettingsBtn.addEventListener("click", () => ui.showSettings(true));
+  if (ui.elements.authSettingsBtn) {
+    ui.elements.authSettingsBtn.addEventListener("click", () => ui.showSettings(true));
+  }
 
   ui.elements.loginForm.addEventListener("submit", onLogin);
   ui.elements.registerForm.addEventListener("submit", onRegister);
@@ -157,7 +159,12 @@ function bindWSHandlers() {
 
 async function onLogin(event) {
   event.preventDefault();
-  await checkServerHealth();
+  ui.setAuthMessage("Conectando ao servidor...", "info");
+  const serverReady = await checkServerHealth();
+  if (!serverReady) {
+    ui.setAuthMessage("Servidor indisponível no momento. Aguarde e tente novamente.", "error");
+    return;
+  }
   try {
     const payload = await apiRequest("/api/auth/login", {
       method: "POST",
@@ -175,14 +182,22 @@ async function onLogin(event) {
     await refreshDevices();
 
     ui.log("Login realizado");
+    ui.clearAuthMessage();
   } catch (error) {
-    ui.log(`Falha no login: ${humanizeNetworkError(error)}`);
+    const message = humanizeNetworkError(error);
+    ui.log(`Falha no login: ${message}`);
+    ui.setAuthMessage(`Falha no login: ${message}`, "error");
   }
 }
 
 async function onRegister(event) {
   event.preventDefault();
-  await checkServerHealth();
+  ui.setAuthMessage("Conectando ao servidor...", "info");
+  const serverReady = await checkServerHealth();
+  if (!serverReady) {
+    ui.setAuthMessage("Servidor indisponível no momento. Aguarde e tente novamente.", "error");
+    return;
+  }
   try {
     await apiRequest("/api/auth/register", {
       method: "POST",
@@ -193,9 +208,12 @@ async function onRegister(event) {
       })
     });
     ui.log("Cadastro concluído. Faça login para continuar.");
+    ui.setAuthMessage("Cadastro concluído. Faça login para continuar.", "success");
     ui.showTab("login");
   } catch (error) {
-    ui.log(`Falha no cadastro: ${humanizeNetworkError(error)}`);
+    const message = humanizeNetworkError(error);
+    ui.log(`Falha no cadastro: ${message}`);
+    ui.setAuthMessage(`Falha no cadastro: ${message}`, "error");
   }
 }
 
@@ -310,6 +328,7 @@ function onSaveSettings() {
   setState({ settings: updated });
   ui.showSettings(false);
   ui.log("Configurações salvas");
+  ui.setAuthMessage("Configurações atualizadas.", "success");
   checkServerHealth();
 }
 

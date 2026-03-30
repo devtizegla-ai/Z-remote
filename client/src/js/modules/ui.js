@@ -12,6 +12,7 @@ export function createUI() {
     loginForm: document.getElementById("loginForm"),
     loginEmail: document.getElementById("loginEmail"),
     loginPassword: document.getElementById("loginPassword"),
+    authMessage: document.getElementById("authMessage"),
     registerForm: document.getElementById("registerForm"),
     registerName: document.getElementById("registerName"),
     registerEmail: document.getElementById("registerEmail"),
@@ -167,6 +168,22 @@ export function createUI() {
     elements.fileProgressLabel.textContent = `${value}%`;
   }
 
+  function setAuthMessage(message, type = "info") {
+    elements.authMessage.textContent = message;
+    elements.authMessage.classList.remove("hidden", "error", "success");
+    if (type === "error") {
+      elements.authMessage.classList.add("error");
+    } else if (type === "success") {
+      elements.authMessage.classList.add("success");
+    }
+  }
+
+  function clearAuthMessage() {
+    elements.authMessage.textContent = "";
+    elements.authMessage.classList.add("hidden");
+    elements.authMessage.classList.remove("error", "success");
+  }
+
   return {
     elements,
     showTab,
@@ -176,7 +193,9 @@ export function createUI() {
     renderIncomingFiles,
     setRemoteFrame,
     showSettings,
-    updateUploadProgress
+    updateUploadProgress,
+    setAuthMessage,
+    clearAuthMessage
   };
 }
 
