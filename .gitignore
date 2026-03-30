@@ -1,0 +1,27 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Env
+.env
+*.env.local
+
+# Go
+server/bin/
+server/data/
+server/coverage.out
+
+# Node/Tauri
+client/node_modules/
+client/dist/
+client/.vite/
+client/src-tauri/target/
+client/src-tauri/gen/
+client/src-tauri/.cargo/
+
+# IDE
+.vscode/
+.idea/
+

@@ -1,0 +1,11 @@
+name: ci-placeholder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: TODO
+        run: echo "Configure CI pipeline in future phase"

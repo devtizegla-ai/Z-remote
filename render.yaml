@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: remote-access-mvp-server
+    env: go
+    rootDir: server
+    buildCommand: go mod download && go build -o bin/remote-server ./cmd/server
+    startCommand: ./bin/remote-server
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SERVER_ADDR
+        value: :8080
+      - key: DB_DRIVER
+        value: sqlite
+      - key: DB_URL
+        value: ./data/remote_access.db
+      - key: FILE_STORAGE_DIR
+        value: ./data/uploads
+      - key: JWT_ISSUER
+        value: remote-access-mvp
+      - key: ACCESS_TOKEN_TTL
+        value: 15m
+      - key: REFRESH_TOKEN_TTL
+        value: 168h
+      - key: SESSION_TOKEN_TTL
+        value: 2h
+      - key: LOGIN_RATE_LIMIT
+        value: 10
+      - key: LOGIN_RATE_WINDOW
+        value: 1m
+      - key: FILE_MAX_BYTES
+        value: 10485760
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://your-tauri-app-origin
+      - key: JWT_SECRET
+        generateValue: true
+
