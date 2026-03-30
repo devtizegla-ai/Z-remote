@@ -30,15 +30,16 @@ const ui = createUI();
 let recoveringDeviceIdentity = false;
 let lastDeviceRecoveryAt = 0;
 let wsClose1006Count = 0;
+let bootstrappingAuth = false;
 
 setState({
   settings: loadSettings(),
   tokens: loadTokens(),
   user: loadUser(),
-  serverReachable: null
+  serverReachable: null,
+  bootMessage: "Inicializando dispositivo..."
 });
 
-ui.showTab("login");
 subscribe(() => {
   ui.render();
   ui.renderIncomingFiles(onDownloadTransfer);
@@ -49,35 +50,14 @@ bindBaseEvents();
 bindWSHandlers();
 bindDeviceRecoveryHandler();
 startServerHealthMonitor();
-
-if (state.tokens?.access_token) {
-  bootstrapWithExistingToken();
-}
-
-async function bootstrapWithExistingToken() {
-  try {
-    const me = await apiRequest("/api/me", { method: "GET" });
-    setState({ user: me });
-    saveUser(me);
-    await registerCurrentDevice();
-    await refreshDevices();
-  } catch (error) {
-    ui.log(`Sessao salva invalida: ${error.message}`);
-    logout();
-  }
-}
+bootstrapDeviceAuth(false);
 
 function bindBaseEvents() {
-  ui.elements.tabLogin.addEventListener("click", () => ui.showTab("login"));
-  ui.elements.tabRegister.addEventListener("click", () => ui.showTab("register"));
-  if (ui.elements.authSettingsBtn) {
-    ui.elements.authSettingsBtn.addEventListener("click", () => ui.showSettings(true));
-  }
+  ui.elements.authSettingsBtn.addEventListener("click", () => ui.showSettings(true));
+  ui.elements.retryBootstrapBtn.addEventListener("click", () => bootstrapDeviceAuth(false));
 
-  ui.elements.loginForm.addEventListener("submit", onLogin);
-  ui.elements.registerForm.addEventListener("submit", onRegister);
   ui.elements.refreshDevicesBtn.addEventListener("click", refreshDevices);
-  ui.elements.logoutBtn.addEventListener("click", logout);
+  ui.elements.logoutBtn.addEventListener("click", onReprovisionDevice);
   ui.elements.connectByIdBtn.addEventListener("click", onConnectById);
   ui.elements.partnerIdInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -98,7 +78,6 @@ function bindBaseEvents() {
   ui.elements.endSessionBtn.addEventListener("click", onEndSession);
 
   ui.elements.sendFileBtn.addEventListener("click", onSendFile);
-
   ui.elements.acceptRequestBtn.addEventListener("click", () => onRespondRequest(true));
   ui.elements.rejectRequestBtn.addEventListener("click", () => onRespondRequest(false));
 
@@ -112,6 +91,7 @@ function bindWSHandlers() {
     wsClose1006Count = 0;
     ui.log("Canal WebSocket conectado");
   });
+
   wsClient.on("close", ({ code, reason } = {}) => {
     const suffix = code ? ` (code=${code}${reason ? `, reason=${reason}` : ""})` : "";
     ui.log(`Canal WebSocket desconectado${suffix}`);
@@ -125,6 +105,7 @@ function bindWSHandlers() {
       wsClose1006Count = 0;
     }
   });
+
   wsClient.on("error", (error) => ui.log(error.message));
 
   wsClient.on("session_request", ({ request }) => {
@@ -144,9 +125,7 @@ function bindWSHandlers() {
       try {
         const started = await apiRequest("/api/sessions/start", {
           method: "POST",
-          body: JSON.stringify({
-            request_id: request.id
-          })
+          body: JSON.stringify({ request_id: request.id })
         });
         setState({ activeSession: started.remote_session || started.session || null });
       } catch (error) {
@@ -206,71 +185,110 @@ function bindDeviceRecoveryHandler() {
   });
 }
 
-async function onLogin(event) {
-  event.preventDefault();
-  ui.setAuthMessage("Tentando login (pode levar ate 1 min no Render free)...", "info");
-  ui.setAuthLoading(true);
-  await checkServerHealth();
+async function bootstrapDeviceAuth(forceFresh) {
+  if (bootstrappingAuth) {
+    return;
+  }
+  bootstrappingAuth = true;
+
   try {
-    const payload = await apiRequest("/api/auth/login", {
-      method: "POST",
-      timeoutMs: 12000,
-      retryAttempts: 2,
-      retryDelayMs: 2500,
-      body: JSON.stringify({
-        email: ui.elements.loginEmail.value.trim(),
-        password: ui.elements.loginPassword.value
-      })
-    });
+    setState({ bootMessage: "Inicializando dispositivo..." });
+    ui.setBootStatus("Inicializando dispositivo...");
 
-    setState({ tokens: payload, user: payload.user });
-    saveTokens(payload);
-    saveUser(payload.user);
+    if (forceFresh) {
+      clearTokens();
+      clearUser();
+      setState({ tokens: null, user: null, device: null, wsConnected: false });
+      wsClient.disconnect();
+    }
 
-    await registerCurrentDevice();
+    await checkServerHealth();
+
+    if (!forceFresh && state.tokens?.access_token) {
+      try {
+        const me = await apiRequest("/api/me", { method: "GET" });
+        setState({ user: me });
+        saveUser(me);
+        await registerCurrentDevice();
+        await refreshDevices();
+        setState({ bootMessage: "Dispositivo autenticado." });
+        return;
+      } catch {
+        clearTokens();
+        clearUser();
+        setState({ tokens: null, user: null, device: null });
+      }
+    }
+
+    await deviceLogin();
     await refreshDevices();
-
-    ui.log("Login realizado");
-    ui.clearAuthMessage();
+    setState({ bootMessage: "Dispositivo autenticado." });
   } catch (error) {
     const message = humanizeNetworkError(error);
-    ui.log(`Falha no login: ${message}`);
-    ui.setAuthMessage(`Falha no login: ${message}`, "error");
+    setState({
+      tokens: null,
+      user: null,
+      device: null,
+      wsConnected: false,
+      bootMessage: `Falha ao autenticar dispositivo: ${message}`
+    });
+    ui.log(`Falha no bootstrap do dispositivo: ${message}`);
   } finally {
-    ui.setAuthLoading(false);
+    bootstrappingAuth = false;
   }
 }
 
-async function onRegister(event) {
-  event.preventDefault();
-  ui.setAuthMessage("Criando conta (pode levar ate 1 min no Render free)...", "info");
-  ui.setAuthLoading(true);
-  await checkServerHealth();
+async function deviceLogin() {
+  const deviceId = getDeviceId();
+  const deviceAuthKey = getDeviceAuthKey();
+
+  let runtimeInfo = {
+    platform: navigator.platform || "unknown",
+    app_version: import.meta.env.VITE_APP_VERSION || "0.1.0",
+    machine_name: state.settings.deviceName,
+    mac_address: ""
+  };
   try {
-    await apiRequest("/api/auth/register", {
-      method: "POST",
-      timeoutMs: 12000,
-      retryAttempts: 2,
-      retryDelayMs: 2500,
-      body: JSON.stringify({
-        name: ui.elements.registerName.value.trim(),
-        email: ui.elements.registerEmail.value.trim(),
-        password: ui.elements.registerPassword.value
-      })
-    });
-    ui.log("Cadastro concluido. Faca login para continuar.");
-    ui.setAuthMessage("Cadastro concluido. Faca login para continuar.", "success");
-    ui.showTab("login");
-  } catch (error) {
-    const message = humanizeNetworkError(error);
-    ui.log(`Falha no cadastro: ${message}`);
-    ui.setAuthMessage(`Falha no cadastro: ${message}`, "error");
-  } finally {
-    ui.setAuthLoading(false);
+    runtimeInfo = await invoke("get_runtime_info");
+  } catch {
+    // browser fallback
   }
+
+  const payload = await apiRequest("/api/auth/device-login", {
+    method: "POST",
+    timeoutMs: 15000,
+    retryAttempts: 3,
+    retryDelayMs: 2500,
+    headers: {
+      "X-Device-ID": deviceId,
+      "X-Device-Key": deviceAuthKey
+    },
+    body: JSON.stringify({
+      device_id: deviceId,
+      device_name: state.settings.deviceName,
+      machine_name: runtimeInfo.machine_name || runtimeInfo.hostname || state.settings.deviceName,
+      mac_address: runtimeInfo.mac_address || "",
+      platform: runtimeInfo.platform || "unknown",
+      app_version: runtimeInfo.app_version || import.meta.env.VITE_APP_VERSION || "0.1.0"
+    })
+  });
+
+  setState({
+    tokens: payload,
+    user: payload.user,
+    device: payload.device
+  });
+  saveTokens(payload);
+  saveUser(payload.user);
+  wsClient.disconnect();
+  wsClient.connect();
+  ui.log(`Dispositivo autenticado: ${payload.device?.id || deviceId}`);
 }
 
 async function registerCurrentDevice() {
+  if (!state.tokens?.access_token) {
+    return;
+  }
   await registerCurrentDeviceInternal(true);
 }
 
@@ -312,7 +330,8 @@ async function registerCurrentDeviceInternal(allowIdentityReset) {
   } catch (error) {
     if (allowIdentityReset && isRecoverableDeviceRegistrationError(error?.message || "")) {
       resetDeviceIdentity();
-      return registerCurrentDeviceInternal(false);
+      await bootstrapDeviceAuth(true);
+      return;
     }
     throw error;
   }
@@ -352,28 +371,12 @@ async function requestConnectionToDevice(targetDeviceID, targetLabel) {
   try {
     const response = await apiRequest("/api/sessions/request", {
       method: "POST",
-      body: JSON.stringify({
-        target_device_id: targetDeviceID
-      })
+      body: JSON.stringify({ target_device_id: targetDeviceID })
     });
     const request = response.session_request;
     ui.log(`Solicitacao enviada para ${targetLabel} (${request.id})`);
   } catch (error) {
     ui.log(`Falha ao solicitar conexao: ${error.message}`);
-  }
-}
-
-async function onCopyMyId() {
-  const deviceID = state.device?.id;
-  if (!deviceID) {
-    ui.log("ID do dispositivo ainda nao disponivel");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(deviceID);
-    ui.log("ID copiado para area de transferencia");
-  } catch {
-    ui.log(`Seu ID: ${deviceID}`);
   }
 }
 
@@ -412,6 +415,15 @@ async function onSendFile() {
   }
 }
 
+async function onDownloadTransfer(transferId) {
+  try {
+    await downloadTransfer(transferId);
+    ui.log(`Arquivo baixado: ${transferId}`);
+  } catch (error) {
+    ui.log(`Falha no download: ${error.message}`);
+  }
+}
+
 async function onEndSession() {
   if (!state.activeSession) {
     ui.log("Nenhuma sessao ativa para encerrar");
@@ -432,13 +444,24 @@ async function onEndSession() {
   }
 }
 
-async function onDownloadTransfer(transferId) {
-  try {
-    await downloadTransfer(transferId);
-    ui.log(`Arquivo baixado: ${transferId}`);
-  } catch (error) {
-    ui.log(`Falha no download: ${error.message}`);
+async function onCopyMyId() {
+  const deviceID = state.device?.id;
+  if (!deviceID) {
+    ui.log("ID do dispositivo ainda nao disponivel");
+    return;
   }
+  try {
+    await navigator.clipboard.writeText(deviceID);
+    ui.log("ID copiado para area de transferencia");
+  } catch {
+    ui.log(`Seu ID: ${deviceID}`);
+  }
+}
+
+async function onReprovisionDevice() {
+  ui.log("Reprovisionando dispositivo...");
+  resetDeviceIdentity();
+  await bootstrapDeviceAuth(true);
 }
 
 function onSaveSettings() {
@@ -454,29 +477,11 @@ function onSaveSettings() {
   setState({ settings: updated });
   ui.showSettings(false);
   ui.log("Configuracoes salvas");
-  ui.setAuthMessage("Configuracoes atualizadas.", "success");
   checkServerHealth();
-}
 
-function logout() {
-  stopHostSharing(ui.log);
-  unbindControllerInput();
-  wsClient.disconnect();
-
-  clearTokens();
-  clearUser();
-  setState({
-    tokens: null,
-    user: null,
-    device: null,
-    devices: [],
-    wsConnected: false,
-    pendingRequest: null,
-    activeSession: null,
-    incomingFiles: []
-  });
-
-  ui.log("Sessao encerrada");
+  if (!state.tokens?.access_token) {
+    bootstrapDeviceAuth(false);
+  }
 }
 
 function cleanupActiveSession(message) {
@@ -506,10 +511,9 @@ async function checkServerHealth() {
 }
 
 async function recoverDeviceIdentity(trigger) {
-  if (!state.tokens?.access_token || recoveringDeviceIdentity) {
+  if (recoveringDeviceIdentity) {
     return;
   }
-
   const now = Date.now();
   if (now - lastDeviceRecoveryAt < 20000) {
     return;
@@ -520,7 +524,7 @@ async function recoverDeviceIdentity(trigger) {
   try {
     ui.log(`${trigger}. Renovando identidade deste dispositivo...`);
     resetDeviceIdentity();
-    await registerCurrentDeviceInternal(false);
+    await bootstrapDeviceAuth(true);
     await refreshDevices();
     ui.log("Identidade do dispositivo renovada com sucesso.");
   } catch (error) {

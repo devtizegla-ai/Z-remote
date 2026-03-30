@@ -64,6 +64,7 @@ func main() {
 	filesService.SetNotifier(hub)
 
 	authHandler := auth.NewHandler(authService)
+	deviceAuthHandler := auth.NewDeviceHandler(authService, devicesService)
 	devicesHandler := devices.NewHandler(devicesService)
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	filesHandler := files.NewHandler(filesService)
@@ -77,6 +78,7 @@ func main() {
 		}),
 		AuthRegister:    http.HandlerFunc(authHandler.Register),
 		AuthLogin:       loginLimiter.Middleware(http.HandlerFunc(authHandler.Login)),
+		AuthDeviceLogin: http.HandlerFunc(deviceAuthHandler.Login),
 		Me:              authMW(http.HandlerFunc(authHandler.Me)),
 		DevicesRegister: authMW(http.HandlerFunc(devicesHandler.Register)),
 		DevicesList:     authMW(http.HandlerFunc(devicesHandler.List)),

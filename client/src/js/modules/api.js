@@ -108,7 +108,7 @@ function shouldRecoverFromInvalidDeviceAuth(message, path, options) {
   if (options.__deviceAuthRetried) {
     return false;
   }
-  if (path === "/api/devices/register" || path === "/health") {
+  if (path === "/api/devices/register" || path === "/api/auth/device-login" || path === "/health") {
     return false;
   }
   return true;

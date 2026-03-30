@@ -99,6 +99,14 @@ p {
   max-width: 470px;
   margin: 34px auto;
   padding: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.boot-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tabs {

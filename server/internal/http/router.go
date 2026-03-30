@@ -10,6 +10,7 @@ type RouteHandlers struct {
 	Health          nethttp.Handler
 	AuthRegister    nethttp.Handler
 	AuthLogin       nethttp.Handler
+	AuthDeviceLogin nethttp.Handler
 	Me              nethttp.Handler
 	DevicesRegister nethttp.Handler
 	DevicesList     nethttp.Handler
@@ -29,6 +30,7 @@ func NewRouter(cfg config.Config, handlers RouteHandlers) nethttp.Handler {
 
 	mux.Handle("/api/auth/register", methodHandler(nethttp.MethodPost, handlers.AuthRegister))
 	mux.Handle("/api/auth/login", methodHandler(nethttp.MethodPost, handlers.AuthLogin))
+	mux.Handle("/api/auth/device-login", methodHandler(nethttp.MethodPost, handlers.AuthDeviceLogin))
 
 	mux.Handle("/api/me", methodHandler(nethttp.MethodGet, handlers.Me))
 	mux.Handle("/api/devices/register", methodHandler(nethttp.MethodPost, handlers.DevicesRegister))

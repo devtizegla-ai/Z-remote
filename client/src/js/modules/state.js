@@ -8,6 +8,7 @@ export const state = {
   devices: [],
   wsConnected: false,
   serverReachable: null,
+  bootMessage: "Inicializando dispositivo...",
   pendingRequest: null,
   activeSession: null,
   incomingFiles: []

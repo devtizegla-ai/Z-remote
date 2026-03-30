@@ -14,7 +14,7 @@
         <div class="brand-logo">ZR</div>
         <div>
           <h1>Z Remote</h1>
-          <p class="muted">Remote desktop relay - RustDesk-like UX</p>
+          <p class="muted">Modelo de autenticacao por dispositivo (estilo RustDesk)</p>
         </div>
       </div>
       <div id="connectionBadge" class="badge disconnected">Offline</div>
@@ -22,30 +22,12 @@
 
     <main class="layout">
       <section id="authSection" class="panel auth-panel">
-        <div class="tabs">
-          <button id="tabLogin" class="tab active">Login</button>
-          <button id="tabRegister" class="tab">Cadastro</button>
-          <button id="authSettingsBtn" class="tab">Servidor</button>
+        <h2>Inicializando dispositivo</h2>
+        <p id="bootStatus" class="muted">Conectando ao servidor...</p>
+        <div class="boot-actions">
+          <button id="retryBootstrapBtn" class="btn btn-primary">Tentar novamente</button>
+          <button id="authSettingsBtn" class="btn">Servidor</button>
         </div>
-
-        <form id="loginForm" class="form active">
-          <label>Email</label>
-          <input type="email" id="loginEmail" required />
-          <label>Senha</label>
-          <input type="password" id="loginPassword" required minlength="6" />
-          <button type="submit" class="btn btn-primary">Entrar</button>
-        </form>
-
-        <form id="registerForm" class="form">
-          <label>Nome</label>
-          <input type="text" id="registerName" required />
-          <label>Email</label>
-          <input type="email" id="registerEmail" required />
-          <label>Senha</label>
-          <input type="password" id="registerPassword" required minlength="6" />
-          <button type="submit" class="btn btn-primary">Criar conta</button>
-        </form>
-        <p id="authMessage" class="auth-message hidden"></p>
       </section>
 
       <section id="appSection" class="panel app-panel hidden">
@@ -63,7 +45,7 @@
           </div>
           <button id="refreshDevicesBtn" class="btn">Atualizar dispositivos</button>
           <button id="openSettingsBtn" class="btn">Configuracoes</button>
-          <button id="logoutBtn" class="btn btn-danger">Sair</button>
+          <button id="logoutBtn" class="btn btn-danger">Reprovisionar</button>
         </aside>
 
         <section class="content">

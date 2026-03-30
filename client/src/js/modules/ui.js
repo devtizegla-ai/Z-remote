@@ -1,4 +1,4 @@
-import { state } from "./state.js";
+﻿import { state } from "./state.js";
 
 export function createUI() {
   const logs = [];
@@ -6,17 +6,9 @@ export function createUI() {
   const elements = {
     authSection: document.getElementById("authSection"),
     appSection: document.getElementById("appSection"),
-    tabLogin: document.getElementById("tabLogin"),
-    tabRegister: document.getElementById("tabRegister"),
     authSettingsBtn: document.getElementById("authSettingsBtn"),
-    loginForm: document.getElementById("loginForm"),
-    loginEmail: document.getElementById("loginEmail"),
-    loginPassword: document.getElementById("loginPassword"),
-    authMessage: document.getElementById("authMessage"),
-    registerForm: document.getElementById("registerForm"),
-    registerName: document.getElementById("registerName"),
-    registerEmail: document.getElementById("registerEmail"),
-    registerPassword: document.getElementById("registerPassword"),
+    retryBootstrapBtn: document.getElementById("retryBootstrapBtn"),
+    bootStatus: document.getElementById("bootStatus"),
     devicesList: document.getElementById("devicesList"),
     connectionBadge: document.getElementById("connectionBadge"),
     userLabel: document.getElementById("userLabel"),
@@ -52,18 +44,10 @@ export function createUI() {
     rejectRequestBtn: document.getElementById("rejectRequestBtn")
   };
 
-  function showTab(tab) {
-    const loginActive = tab === "login";
-    elements.tabLogin.classList.toggle("active", loginActive);
-    elements.tabRegister.classList.toggle("active", !loginActive);
-    elements.loginForm.classList.toggle("active", loginActive);
-    elements.registerForm.classList.toggle("active", !loginActive);
-  }
-
   function log(message) {
     const timestamp = new Date().toLocaleTimeString();
     logs.unshift(`[${timestamp}] ${message}`);
-    logs.splice(50);
+    logs.splice(60);
     renderLogs();
   }
 
@@ -98,8 +82,7 @@ export function createUI() {
       title.textContent = `${ownerPrefix}${device.device_name}`;
       const details = document.createElement("p");
       details.className = "muted";
-      details.textContent =
-        `${device.machine_name || "host"} - ${device.platform} - ${device.status} - ID: ${device.id}`;
+      details.textContent = `${device.machine_name || "host"} - ${device.platform} - ${device.status} - ID: ${device.id}`;
       info.appendChild(title);
       info.appendChild(details);
       card.appendChild(info);
@@ -133,7 +116,7 @@ export function createUI() {
   }
 
   function render() {
-    const logged = Boolean(state.tokens?.access_token && state.user);
+    const logged = Boolean(state.tokens?.access_token && state.user && state.device);
     elements.authSection.classList.toggle("hidden", logged);
     elements.appSection.classList.toggle("hidden", !logged);
 
@@ -152,10 +135,11 @@ export function createUI() {
       elements.connectionBadge.textContent = serverReady ? "Servidor OK" : "Servidor Indisponivel";
       elements.connectionBadge.classList.toggle("connected", serverReady);
       elements.connectionBadge.classList.toggle("disconnected", !serverReady);
+      elements.bootStatus.textContent = state.bootMessage || "Inicializando dispositivo...";
     }
 
-    elements.userLabel.textContent = state.user?.name || "Usuario";
-    elements.deviceLabel.textContent = state.device?.device_name || "Dispositivo";
+    elements.userLabel.textContent = state.user?.name || "Dispositivo";
+    elements.deviceLabel.textContent = state.device?.device_name || "Sem registro";
     elements.myDeviceId.textContent = state.device?.id || "-";
 
     const hasSession = Boolean(state.activeSession);
@@ -193,38 +177,12 @@ export function createUI() {
     elements.fileProgressLabel.textContent = `${value}%`;
   }
 
-  function setAuthMessage(message, type = "info") {
-    elements.authMessage.textContent = message;
-    elements.authMessage.classList.remove("hidden", "error", "success");
-    if (type === "error") {
-      elements.authMessage.classList.add("error");
-    } else if (type === "success") {
-      elements.authMessage.classList.add("success");
-    }
-  }
-
-  function clearAuthMessage() {
-    elements.authMessage.textContent = "";
-    elements.authMessage.classList.add("hidden");
-    elements.authMessage.classList.remove("error", "success");
-  }
-
-  function setAuthLoading(loading) {
-    const loginBtn = elements.loginForm.querySelector("button[type='submit']");
-    const registerBtn = elements.registerForm.querySelector("button[type='submit']");
-    if (loginBtn) {
-      loginBtn.disabled = loading;
-      loginBtn.textContent = loading ? "Entrando..." : "Entrar";
-    }
-    if (registerBtn) {
-      registerBtn.disabled = loading;
-      registerBtn.textContent = loading ? "Criando..." : "Criar conta";
-    }
+  function setBootStatus(message) {
+    elements.bootStatus.textContent = message;
   }
 
   return {
     elements,
-    showTab,
     log,
     render,
     renderDevices,
@@ -232,8 +190,6 @@ export function createUI() {
     setRemoteFrame,
     showSettings,
     updateUploadProgress,
-    setAuthMessage,
-    clearAuthMessage,
-    setAuthLoading
+    setBootStatus
   };
 }
