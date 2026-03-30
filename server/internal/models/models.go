@@ -51,6 +51,7 @@ type FileTransfer struct {
 	ID                 string    `json:"id"`
 	SessionID          string    `json:"session_id"`
 	Filename           string    `json:"filename"`
+	TargetSavePath     string    `json:"target_save_path,omitempty"`
 	SizeBytes          int64     `json:"size_bytes"`
 	Status             string    `json:"status"`
 	StoragePath        string    `json:"-"`

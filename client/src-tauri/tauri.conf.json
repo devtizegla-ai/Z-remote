@@ -16,7 +16,8 @@
         "title": "Remote Access MVP",
         "width": 1320,
         "height": 840,
-        "resizable": true
+        "resizable": true,
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {

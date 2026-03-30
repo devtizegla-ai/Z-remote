@@ -37,6 +37,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	sessionToken := r.FormValue("session_token")
 	fromDeviceID := r.FormValue("from_device_id")
 	toDeviceID := r.FormValue("to_device_id")
+	targetSavePath := r.FormValue("target_save_path")
 	if fromDeviceID != "" && fromDeviceID != deviceID {
 		apphttp.WriteError(w, http.StatusBadRequest, "from_device_id does not match authenticated device")
 		return
@@ -50,13 +51,14 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	transfer, err := h.service.Upload(r.Context(), UploadInput{
-		UserID:       userID,
-		FromDeviceID: fromDeviceID,
-		ToDeviceID:   toDeviceID,
-		SessionID:    sessionID,
-		SessionToken: sessionToken,
-		Header:       header,
-		Reader:       file,
+		UserID:         userID,
+		FromDeviceID:   fromDeviceID,
+		ToDeviceID:     toDeviceID,
+		SessionID:      sessionID,
+		SessionToken:   sessionToken,
+		TargetSavePath: targetSavePath,
+		Header:         header,
+		Reader:         file,
 	})
 	if err != nil {
 		h.handleError(w, err)

@@ -39,6 +39,7 @@ export function createUI() {
     stopShareBtn: document.getElementById("stopShareBtn"),
     endSessionBtn: document.getElementById("endSessionBtn"),
     fileInput: document.getElementById("fileInput"),
+    targetSavePathInput: document.getElementById("targetSavePathInput"),
     sendFileBtn: document.getElementById("sendFileBtn"),
     acceptRequestBtn: document.getElementById("acceptRequestBtn"),
     rejectRequestBtn: document.getElementById("rejectRequestBtn")
@@ -144,13 +145,25 @@ export function createUI() {
 
     const hasSession = Boolean(state.activeSession);
     elements.sessionCard.classList.toggle("hidden", !hasSession);
+    let sessionRole = "";
     if (hasSession) {
-      const role = state.activeSession.requester_device_id === state.device.id ? "controller" : "host";
-      elements.sessionMeta.textContent = `Sessao ${state.activeSession.id} - Perfil: ${role}`;
+      sessionRole = state.activeSession.requester_device_id === state.device.id ? "controller" : "host";
+      elements.sessionMeta.textContent = `Sessao ${state.activeSession.id} - Perfil: ${sessionRole}`;
+      const isController = sessionRole === "controller";
+      elements.sendFileBtn.disabled = false;
+      elements.fileInput.disabled = false;
+      elements.targetSavePathInput.disabled = !isController;
+      elements.targetSavePathInput.placeholder = isController
+        ? "Ex: C:\\Users\\Public\\Downloads"
+        : "Destino definido pelo controlador";
     } else {
       elements.remoteFrame.removeAttribute("src");
       elements.incomingFiles.innerHTML = "";
+      elements.targetSavePathInput.disabled = true;
+      elements.sendFileBtn.disabled = true;
+      elements.fileInput.disabled = true;
     }
+    document.body.classList.toggle("controller-fullscreen", hasSession && sessionRole === "controller");
 
     if (state.pendingRequest) {
       elements.requestModal.classList.remove("hidden");

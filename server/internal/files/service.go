@@ -51,13 +51,14 @@ func (s *Service) SetNotifier(notifier Notifier) {
 }
 
 type UploadInput struct {
-	UserID       string
-	FromDeviceID string
-	ToDeviceID   string
-	SessionID    string
-	SessionToken string
-	Header       *multipart.FileHeader
-	Reader       multipart.File
+	UserID         string
+	FromDeviceID   string
+	ToDeviceID     string
+	SessionID      string
+	SessionToken   string
+	TargetSavePath string
+	Header         *multipart.FileHeader
+	Reader         multipart.File
 }
 
 func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTransfer, error) {
@@ -114,6 +115,7 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 		ID:                 transferID,
 		SessionID:          input.SessionID,
 		Filename:           safeName,
+		TargetSavePath:     sanitizeTargetSavePath(input.TargetSavePath),
 		SizeBytes:          written,
 		Status:             "uploaded",
 		StoragePath:        storagePath,
@@ -124,11 +126,12 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO file_transfers (
-			id, session_id, filename, size_bytes, status, storage_path, uploaded_by_device_id, target_device_id, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, session_id, filename, target_save_path, size_bytes, status, storage_path, uploaded_by_device_id, target_device_id, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		transfer.ID,
 		transfer.SessionID,
 		transfer.Filename,
+		transfer.TargetSavePath,
 		transfer.SizeBytes,
 		transfer.Status,
 		transfer.StoragePath,
@@ -142,22 +145,24 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 	}
 
 	s.logAudit(ctx, input.UserID, input.FromDeviceID, "file_uploaded", map[string]any{
-		"transfer_id":  transfer.ID,
-		"session_id":   transfer.SessionID,
-		"filename":     transfer.Filename,
-		"size_bytes":   transfer.SizeBytes,
-		"to_device_id": transfer.TargetDeviceID,
+		"transfer_id":      transfer.ID,
+		"session_id":       transfer.SessionID,
+		"filename":         transfer.Filename,
+		"target_save_path": transfer.TargetSavePath,
+		"size_bytes":       transfer.SizeBytes,
+		"to_device_id":     transfer.TargetDeviceID,
 	})
 
 	if s.notifier != nil {
 		_ = s.notifier.NotifyDevice(input.ToDeviceID, map[string]any{
 			"type": "file_available",
 			"file": map[string]any{
-				"id":             transfer.ID,
-				"session_id":     transfer.SessionID,
-				"filename":       transfer.Filename,
-				"size_bytes":     transfer.SizeBytes,
-				"from_device_id": input.FromDeviceID,
+				"id":               transfer.ID,
+				"session_id":       transfer.SessionID,
+				"filename":         transfer.Filename,
+				"target_save_path": transfer.TargetSavePath,
+				"size_bytes":       transfer.SizeBytes,
+				"from_device_id":   input.FromDeviceID,
 			},
 		})
 	}
@@ -194,7 +199,7 @@ func (s *Service) Download(ctx context.Context, userID, transferID string) (mode
 
 func (s *Service) getByID(ctx context.Context, transferID string) (models.FileTransfer, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, session_id, filename, size_bytes, status, storage_path, uploaded_by_device_id, target_device_id, created_at
+		SELECT id, session_id, filename, target_save_path, size_bytes, status, storage_path, uploaded_by_device_id, target_device_id, created_at
 		FROM file_transfers WHERE id = ?`, transferID)
 
 	var transfer models.FileTransfer
@@ -202,6 +207,7 @@ func (s *Service) getByID(ctx context.Context, transferID string) (models.FileTr
 		&transfer.ID,
 		&transfer.SessionID,
 		&transfer.Filename,
+		&transfer.TargetSavePath,
 		&transfer.SizeBytes,
 		&transfer.Status,
 		&transfer.StoragePath,
@@ -238,4 +244,13 @@ func sanitizeFilename(name string) string {
 		return "file.bin"
 	}
 	return name
+}
+
+func sanitizeTargetSavePath(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.ReplaceAll(path, "\x00", "")
+	if len(path) > 512 {
+		return path[:512]
+	}
+	return path
 }

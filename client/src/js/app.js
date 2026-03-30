@@ -1,4 +1,5 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { apiRequest, setInvalidDeviceAuthHandler } from "./modules/api.js";
 import {
   clearTokens,
@@ -27,10 +28,12 @@ import { createUI } from "./modules/ui.js";
 import { wsClient } from "./modules/ws.js";
 
 const ui = createUI();
+const appWindow = safeGetCurrentWindow();
 let recoveringDeviceIdentity = false;
 let lastDeviceRecoveryAt = 0;
 let wsClose1006Count = 0;
 let bootstrappingAuth = false;
+let fullscreenActive = false;
 
 setState({
   settings: loadSettings(),
@@ -143,9 +146,14 @@ function bindWSHandlers() {
 
     const isController = session.requester_device_id === state.device?.id;
     if (isController) {
+      setControllerFullscreen(true);
       bindControllerInput(ui.elements.remoteFrame, ui.log);
     } else {
+      setControllerFullscreen(false);
       unbindControllerInput();
+      startHostSharing(ui.log).catch((error) => {
+        ui.log(`Falha ao iniciar compartilhamento automatico: ${error?.message || error}`);
+      });
     }
   });
 
@@ -160,10 +168,28 @@ function bindWSHandlers() {
     cleanupActiveSession(`Sessao encerrada por ${endedBy || "peer"}`);
   });
 
-  wsClient.on("file_available", ({ file }) => {
+  wsClient.on("file_available", async ({ file }) => {
     if (!file) {
       return;
     }
+
+    const session = state.activeSession;
+    const isController = session && session.requester_device_id === state.device?.id;
+    const shouldAutoSaveOnHost = Boolean(file.target_save_path) && session && !isController && session.id === file.session_id;
+
+    if (shouldAutoSaveOnHost) {
+      try {
+        const result = await downloadTransfer(file.id, {
+          destinationDir: file.target_save_path,
+          requireDestinationSave: true
+        });
+        ui.log(`Arquivo salvo automaticamente em: ${result.savedPath || file.target_save_path}`);
+      } catch (error) {
+        ui.log(`Falha ao salvar arquivo no destino remoto: ${error.message}`);
+      }
+      return;
+    }
+
     setState({ incomingFiles: [file, ...state.incomingFiles].slice(0, 20) });
     ui.log(`Arquivo recebido: ${file.filename}`);
   });
@@ -410,9 +436,20 @@ async function onSendFile() {
     ui.log("Selecione um arquivo antes do envio");
     return;
   }
+
+  const session = state.activeSession;
+  const isController = session && session.requester_device_id === state.device?.id;
+  const targetSavePath = (ui.elements.targetSavePathInput.value || "").trim();
+  if (isController && !targetSavePath) {
+    ui.log("Informe o caminho de destino no computador remoto antes de enviar o arquivo");
+    return;
+  }
+
   try {
     ui.updateUploadProgress(0);
-    await uploadSessionFile(file, (pct) => ui.updateUploadProgress(pct));
+    await uploadSessionFile(file, (pct) => ui.updateUploadProgress(pct), {
+      targetSavePath: isController ? targetSavePath : ""
+    });
     ui.log(`Arquivo enviado: ${file.name}`);
   } catch (error) {
     ui.log(`Falha no envio de arquivo: ${error.message}`);
@@ -421,8 +458,12 @@ async function onSendFile() {
 
 async function onDownloadTransfer(transferId) {
   try {
-    await downloadTransfer(transferId);
-    ui.log(`Arquivo baixado: ${transferId}`);
+    const result = await downloadTransfer(transferId);
+    if (result?.savedPath) {
+      ui.log(`Arquivo salvo em: ${result.savedPath}`);
+    } else {
+      ui.log(`Arquivo baixado: ${transferId}`);
+    }
   } catch (error) {
     ui.log(`Falha no download: ${error.message}`);
   }
@@ -489,6 +530,7 @@ function onSaveSettings() {
 }
 
 function cleanupActiveSession(message) {
+  setControllerFullscreen(false);
   stopHostSharing(ui.log);
   unbindControllerInput();
   setState({
@@ -554,4 +596,24 @@ function humanizeNetworkError(error) {
     return "Servidor indisponivel ou iniciando (Render free pode levar ate ~1 min). Tente novamente.";
   }
   return message;
+}
+
+function safeGetCurrentWindow() {
+  try {
+    return getCurrentWindow();
+  } catch {
+    return null;
+  }
+}
+
+async function setControllerFullscreen(enabled) {
+  if (!appWindow || fullscreenActive === enabled) {
+    return;
+  }
+  fullscreenActive = enabled;
+  try {
+    await appWindow.setFullscreen(enabled);
+  } catch {
+    // Browser fallback (non-Tauri context): ignore.
+  }
 }

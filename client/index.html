@@ -64,19 +64,28 @@
           </div>
 
           <div id="sessionCard" class="card hidden">
-            <h3>Sessao remota</h3>
-            <div class="session-meta" id="sessionMeta"></div>
-            <div class="session-actions">
-              <button id="startShareBtn" class="btn btn-primary">Iniciar compartilhamento (host)</button>
-              <button id="stopShareBtn" class="btn">Parar compartilhamento</button>
-              <button id="endSessionBtn" class="btn btn-danger">Encerrar sessao</button>
+            <div class="session-header-row">
+              <h3>Sessao remota</h3>
+              <details class="session-menu">
+                <summary>Menu</summary>
+                <div class="session-menu-content">
+                  <button id="startShareBtn" class="btn btn-primary">Iniciar compartilhamento (host)</button>
+                  <button id="stopShareBtn" class="btn">Parar compartilhamento</button>
+                  <button id="endSessionBtn" class="btn btn-danger">Encerrar sessao</button>
+                  <div class="menu-inline-file">
+                    <label for="targetSavePathInput">Destino no remoto</label>
+                    <input id="targetSavePathInput" type="text" placeholder="Ex: C:\\Users\\Public\\Downloads" />
+                  </div>
+                  <div class="menu-inline-file">
+                    <input id="fileInput" type="file" />
+                    <button id="sendFileBtn" class="btn">Enviar arquivo</button>
+                  </div>
+                </div>
+              </details>
             </div>
+            <div class="session-meta" id="sessionMeta"></div>
             <div class="viewer-wrap">
               <img id="remoteFrame" alt="Tela remota" tabindex="0" />
-            </div>
-            <div class="transfer-row">
-              <input id="fileInput" type="file" />
-              <button id="sendFileBtn" class="btn">Enviar arquivo</button>
             </div>
             <div class="progress-wrap">
               <progress id="fileProgress" max="100" value="0"></progress>

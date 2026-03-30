@@ -1,10 +1,11 @@
-﻿import { getDeviceAuthKey, getDeviceId, normalizeServerUrl } from "./config.js";
+﻿import { invoke } from "@tauri-apps/api/core";
+import { getDeviceAuthKey, getDeviceId, normalizeServerUrl } from "./config.js";
 import { state } from "./state.js";
 
 const UPLOAD_ATTEMPTS = 3;
 const DOWNLOAD_ATTEMPTS = 3;
 
-export async function uploadSessionFile(file, onProgress) {
+export async function uploadSessionFile(file, onProgress, options = {}) {
   if (!state.activeSession) {
     throw new Error("Nenhuma sessao ativa");
   }
@@ -19,6 +20,7 @@ export async function uploadSessionFile(file, onProgress) {
   form.append("session_token", state.activeSession.session_token);
   form.append("from_device_id", state.device.id);
   form.append("to_device_id", peerDeviceId);
+  form.append("target_save_path", String(options.targetSavePath || "").trim());
   form.append("file", file);
 
   for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
@@ -36,7 +38,7 @@ export async function uploadSessionFile(file, onProgress) {
   throw new Error("Falha no upload");
 }
 
-export async function downloadTransfer(transferId) {
+export async function downloadTransfer(transferId, options = {}) {
   const url = `${buildApiUrl("/api/files/download")}?transfer_id=${encodeURIComponent(transferId)}`;
 
   let response = null;
@@ -87,14 +89,40 @@ export async function downloadTransfer(transferId) {
   const disposition = response.headers.get("Content-Disposition") || "";
   const fileName = parseDownloadFilename(disposition) || `transfer_${transferId}`;
 
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+  const base64 = await blobToBase64WithoutPrefix(blob);
+
+  if (options.destinationDir) {
+    try {
+      const savedPath = await invoke("save_download_file_to_path", {
+        fileName,
+        dataBase64: base64,
+        destinationDir: options.destinationDir
+      });
+      return { savedPath: savedPath || null };
+    } catch (error) {
+      if (options.requireDestinationSave) {
+        throw new Error(`Falha ao salvar no destino remoto: ${error?.message || error}`);
+      }
+    }
+  }
+
+  try {
+    const savedPath = await invoke("save_download_file", {
+      fileName,
+      dataBase64: base64
+    });
+    return { savedPath: savedPath || null };
+  } catch {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+    return { savedPath: null };
+  }
 }
 
 function uploadOnce(form, onProgress) {
@@ -176,4 +204,15 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function blobToBase64WithoutPrefix(blob) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+    reader.readAsDataURL(blob);
+  });
+  const separatorIndex = dataUrl.indexOf(",");
+  return separatorIndex >= 0 ? dataUrl.slice(separatorIndex + 1) : dataUrl;
 }

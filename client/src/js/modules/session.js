@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+﻿import { invoke } from "@tauri-apps/api/core";
 import { state } from "./state.js";
 import { wsClient } from "./ws.js";
 
@@ -7,13 +7,77 @@ const runtime = {
   video: null,
   canvas: null,
   timer: null,
+  captureInFlight: false,
+  nativeFailures: 0,
+  mode: null,
   inputHandlers: []
 };
 
-export async function startHostSharing(log) {
+export async function startHostSharing(log, options = {}) {
   if (runtime.timer) {
     return;
   }
+
+  const forceBrowser = options.forceBrowser === true;
+  runtime.nativeFailures = 0;
+
+  if (!forceBrowser) {
+    const nativeStarted = await tryStartNativeCapture(log);
+    if (nativeStarted) {
+      return;
+    }
+  }
+
+  await startBrowserCapture(log);
+}
+
+async function tryStartNativeCapture(log) {
+  try {
+    // probe command availability and screen access
+    await invoke("capture_primary_screen_jpeg", { quality: 60 });
+  } catch {
+    return false;
+  }
+
+  runtime.mode = "native";
+  runtime.timer = setInterval(async () => {
+    if (!state.activeSession || runtime.captureInFlight) {
+      return;
+    }
+
+    runtime.captureInFlight = true;
+    try {
+      const imageData = await invoke("capture_primary_screen_jpeg", { quality: 60 });
+      wsClient.sendSessionSignal("frame", {
+        image_data: imageData,
+        width: 0,
+        height: 0,
+        ts: Date.now()
+      });
+      runtime.nativeFailures = 0;
+    } catch (error) {
+      runtime.nativeFailures += 1;
+      if (runtime.nativeFailures >= 4) {
+        clearInterval(runtime.timer);
+        runtime.timer = null;
+        runtime.captureInFlight = false;
+        runtime.nativeFailures = 0;
+        log(`Falha na captura nativa (${error?.message || error}). Voltando para captura via sistema.`);
+        startHostSharing(log, { forceBrowser: true }).catch((fallbackError) => {
+          log(`Falha no fallback de captura: ${fallbackError?.message || fallbackError}`);
+        });
+        return;
+      }
+    } finally {
+      runtime.captureInFlight = false;
+    }
+  }, 160);
+
+  log("Compartilhamento de tela iniciado automaticamente (captura nativa da tela inteira)");
+  return true;
+}
+
+async function startBrowserCapture(log) {
   runtime.stream = await navigator.mediaDevices.getDisplayMedia({
     video: { frameRate: 8 },
     audio: false
@@ -27,6 +91,7 @@ export async function startHostSharing(log) {
   runtime.canvas = document.createElement("canvas");
   const ctx = runtime.canvas.getContext("2d", { alpha: false });
 
+  runtime.mode = "browser";
   runtime.timer = setInterval(() => {
     if (!state.activeSession || !ctx || !runtime.video) {
       return;
@@ -51,7 +116,7 @@ export async function startHostSharing(log) {
     stopHostSharing(log);
   });
 
-  log("Compartilhamento de tela iniciado (host)");
+  log("Compartilhamento de tela iniciado (fallback do sistema)");
 }
 
 export function stopHostSharing(log) {
@@ -65,6 +130,9 @@ export function stopHostSharing(log) {
   }
   runtime.video = null;
   runtime.canvas = null;
+  runtime.mode = null;
+  runtime.captureInFlight = false;
+  runtime.nativeFailures = 0;
   log("Compartilhamento de tela encerrado");
 }
 
@@ -184,4 +252,3 @@ export async function handleSessionSignal(message, log, setRemoteFrame) {
     }
   }
 }
-

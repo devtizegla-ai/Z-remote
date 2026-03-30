@@ -1,6 +1,11 @@
-﻿use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
+﻿use base64::{engine::general_purpose, Engine as _};
+use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
+use image::{codecs::jpeg::JpegEncoder, DynamicImage};
+use screenshots::Screen;
 use serde::Serialize;
 use serde_json::Value;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
 struct RuntimeInfo {
@@ -30,6 +35,70 @@ fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
         machine_name,
         mac_address,
     }
+}
+
+#[tauri::command]
+fn capture_primary_screen_jpeg(quality: Option<u8>) -> Result<String, String> {
+    let screens = Screen::all().map_err(|e| format!("failed to enumerate screens: {e}"))?;
+    let screen = screens
+        .first()
+        .ok_or_else(|| "no screen available".to_string())?;
+
+    let image = screen
+        .capture()
+        .map_err(|e| format!("failed to capture screen: {e}"))?;
+
+    let q = quality.unwrap_or(60).clamp(35, 90);
+    let mut jpeg_bytes = Vec::new();
+    {
+        let dynamic = DynamicImage::ImageRgba8(image);
+        let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, q);
+        encoder
+            .encode_image(&dynamic)
+            .map_err(|e| format!("failed to encode jpeg: {e}"))?;
+    }
+
+    let encoded = general_purpose::STANDARD.encode(jpeg_bytes);
+    Ok(format!("data:image/jpeg;base64,{encoded}"))
+}
+
+#[tauri::command]
+fn save_download_file(file_name: String, data_base64: String) -> Result<Option<String>, String> {
+    let bytes = general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|e| format!("invalid file data: {e}"))?;
+
+    let safe_name = sanitize_filename(&file_name);
+    let save_path = rfd::FileDialog::new().set_file_name(&safe_name).save_file();
+    let Some(path) = save_path else {
+        return Ok(None);
+    };
+
+    fs::write(&path, bytes).map_err(|e| format!("failed to save file: {e}"))?;
+    Ok(Some(path.display().to_string()))
+}
+
+#[tauri::command]
+fn save_download_file_to_path(
+    file_name: String,
+    data_base64: String,
+    destination_dir: String,
+) -> Result<String, String> {
+    let bytes = general_purpose::STANDARD
+        .decode(data_base64)
+        .map_err(|e| format!("invalid file data: {e}"))?;
+    let safe_name = sanitize_filename(&file_name);
+
+    let base_dir = if destination_dir.trim().is_empty() {
+        default_downloads_dir()
+    } else {
+        PathBuf::from(destination_dir.trim())
+    };
+    fs::create_dir_all(&base_dir).map_err(|e| format!("failed to create destination dir: {e}"))?;
+
+    let destination = base_dir.join(safe_name);
+    fs::write(&destination, bytes).map_err(|e| format!("failed to save file: {e}"))?;
+    Ok(destination.display().to_string())
 }
 
 #[tauri::command]
@@ -81,11 +150,8 @@ fn apply_input_event(app: tauri::AppHandle, event: Value) -> Result<(), String> 
         "key_down" | "key_up" => {
             let key = event.get("key").and_then(Value::as_str).unwrap_or("");
             let code = event.get("code").and_then(Value::as_str).unwrap_or("");
-            let mapped_key = map_key(key, code).ok_or_else(|| {
-                format!(
-                    "unsupported key event (key={key}, code={code})"
-                )
-            })?;
+            let mapped_key = map_key(key, code)
+                .ok_or_else(|| format!("unsupported key event (key={key}, code={code})"))?;
 
             let direction = if event_type == "key_down" {
                 Direction::Press
@@ -105,8 +171,16 @@ fn apply_input_event(app: tauri::AppHandle, event: Value) -> Result<(), String> 
 }
 
 fn normalized_to_screen(app: &tauri::AppHandle, event: &Value) -> Result<(i32, i32), String> {
-    let x = event.get("x").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 1.0);
-    let y = event.get("y").and_then(Value::as_f64).unwrap_or(0.0).clamp(0.0, 1.0);
+    let x = event
+        .get("x")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
+    let y = event
+        .get("y")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
 
     let monitor = app
         .primary_monitor()
@@ -199,9 +273,46 @@ fn map_key(key: &str, code: &str) -> Option<Key> {
     }
 }
 
+fn sanitize_filename(name: &str) -> String {
+    let candidate = Path::new(name)
+        .file_name()
+        .and_then(|part| part.to_str())
+        .map(str::trim)
+        .unwrap_or_default();
+    if candidate.is_empty() {
+        "file.bin".to_string()
+    } else {
+        candidate.to_string()
+    }
+}
+
+fn default_downloads_dir() -> PathBuf {
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        let path = PathBuf::from(profile).join("Downloads");
+        if fs::create_dir_all(&path).is_ok() {
+            return path;
+        }
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let path = PathBuf::from(home).join("Downloads");
+        if fs::create_dir_all(&path).is_ok() {
+            return path;
+        }
+    }
+
+    std::env::temp_dir()
+}
+
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![get_runtime_info, apply_input_event])
+        .invoke_handler(tauri::generate_handler![
+            get_runtime_info,
+            capture_primary_screen_jpeg,
+            save_download_file,
+            save_download_file_to_path,
+            apply_input_event
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
