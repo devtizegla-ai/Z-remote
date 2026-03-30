@@ -1,6 +1,13 @@
 import { getDeviceAuthKey, getDeviceId, normalizeServerUrl } from "./config.js";
 import { state } from "./state.js";
 
+let invalidDeviceAuthHandler = null;
+let invalidDeviceAuthRecoveryInFlight = false;
+
+export function setInvalidDeviceAuthHandler(handler) {
+  invalidDeviceAuthHandler = typeof handler === "function" ? handler : null;
+}
+
 export async function apiRequest(path, options = {}) {
   const baseUrl = normalizeServerUrl(state.settings.serverUrl);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -29,6 +36,25 @@ export async function apiRequest(path, options = {}) {
     } catch {
       // ignore body parse errors
     }
+
+    if (
+      shouldRecoverFromInvalidDeviceAuth(message, normalizedPath, options) &&
+      invalidDeviceAuthHandler
+    ) {
+      if (!invalidDeviceAuthRecoveryInFlight) {
+        invalidDeviceAuthRecoveryInFlight = true;
+        try {
+          await invalidDeviceAuthHandler(message);
+        } finally {
+          invalidDeviceAuthRecoveryInFlight = false;
+        }
+      }
+      return apiRequest(path, {
+        ...options,
+        __deviceAuthRetried: true
+      });
+    }
+
     throw new Error(message);
   }
 
@@ -72,5 +98,19 @@ async function fetchWithRetry(url, options) {
     }
   }
   throw lastError;
+}
+
+function shouldRecoverFromInvalidDeviceAuth(message, path, options) {
+  const lower = (message || "").toLowerCase();
+  if (!lower.includes("invalid device authentication")) {
+    return false;
+  }
+  if (options.__deviceAuthRetried) {
+    return false;
+  }
+  if (path === "/api/devices/register" || path === "/health") {
+    return false;
+  }
+  return true;
 }
 

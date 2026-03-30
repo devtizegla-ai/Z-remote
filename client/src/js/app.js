@@ -1,5 +1,5 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
-import { apiRequest } from "./modules/api.js";
+import { apiRequest, setInvalidDeviceAuthHandler } from "./modules/api.js";
 import {
   clearTokens,
   clearUser,
@@ -9,6 +9,7 @@ import {
   loadTokens,
   loadUser,
   normalizeServerUrl,
+  resetDeviceIdentity,
   saveSettings,
   saveTokens,
   saveUser
@@ -26,6 +27,9 @@ import { createUI } from "./modules/ui.js";
 import { wsClient } from "./modules/ws.js";
 
 const ui = createUI();
+let recoveringDeviceIdentity = false;
+let lastDeviceRecoveryAt = 0;
+let wsClose1006Count = 0;
 
 setState({
   settings: loadSettings(),
@@ -43,6 +47,7 @@ ui.render();
 
 bindBaseEvents();
 bindWSHandlers();
+bindDeviceRecoveryHandler();
 startServerHealthMonitor();
 
 if (state.tokens?.access_token) {
@@ -95,10 +100,22 @@ function bindBaseEvents() {
 }
 
 function bindWSHandlers() {
-  wsClient.on("open", () => ui.log("Canal WebSocket conectado"));
+  wsClient.on("open", () => {
+    wsClose1006Count = 0;
+    ui.log("Canal WebSocket conectado");
+  });
   wsClient.on("close", ({ code, reason } = {}) => {
     const suffix = code ? ` (code=${code}${reason ? `, reason=${reason}` : ""})` : "";
     ui.log(`Canal WebSocket desconectado${suffix}`);
+    if (code === 1006) {
+      wsClose1006Count += 1;
+      if (wsClose1006Count >= 3) {
+        wsClose1006Count = 0;
+        recoverDeviceIdentity("WebSocket 1006 repetido");
+      }
+    } else {
+      wsClose1006Count = 0;
+    }
   });
   wsClient.on("error", (error) => ui.log(error.message));
 
@@ -175,6 +192,12 @@ function bindWSHandlers() {
   }, 20000);
 }
 
+function bindDeviceRecoveryHandler() {
+  setInvalidDeviceAuthHandler(async () => {
+    await recoverDeviceIdentity("Autenticacao de dispositivo invalida");
+  });
+}
+
 async function onLogin(event) {
   event.preventDefault();
   ui.setAuthMessage("Tentando login (pode levar ate 1 min no Render free)...", "info");
@@ -240,6 +263,10 @@ async function onRegister(event) {
 }
 
 async function registerCurrentDevice() {
+  await registerCurrentDeviceInternal(true);
+}
+
+async function registerCurrentDeviceInternal(allowIdentityReset) {
   const deviceId = getDeviceId();
   const deviceAuthKey = getDeviceAuthKey();
   let runtimeInfo = {
@@ -254,25 +281,33 @@ async function registerCurrentDevice() {
     // fallback browser mode
   }
 
-  const registered = await apiRequest("/api/devices/register", {
-    method: "POST",
-    headers: {
-      "X-Device-ID": deviceId,
-      "X-Device-Key": deviceAuthKey
-    },
-    body: JSON.stringify({
-      device_id: deviceId,
-      device_name: state.settings.deviceName,
-      machine_name: runtimeInfo.machine_name || runtimeInfo.hostname || state.settings.deviceName,
-      mac_address: runtimeInfo.mac_address || "",
-      platform: runtimeInfo.platform || "unknown",
-      app_version: runtimeInfo.app_version || import.meta.env.VITE_APP_VERSION || "0.1.0"
-    })
-  });
+  try {
+    const registered = await apiRequest("/api/devices/register", {
+      method: "POST",
+      headers: {
+        "X-Device-ID": deviceId,
+        "X-Device-Key": deviceAuthKey
+      },
+      body: JSON.stringify({
+        device_id: deviceId,
+        device_name: state.settings.deviceName,
+        machine_name: runtimeInfo.machine_name || runtimeInfo.hostname || state.settings.deviceName,
+        mac_address: runtimeInfo.mac_address || "",
+        platform: runtimeInfo.platform || "unknown",
+        app_version: runtimeInfo.app_version || import.meta.env.VITE_APP_VERSION || "0.1.0"
+      })
+    });
 
-  setState({ device: registered });
-  wsClient.disconnect();
-  wsClient.connect();
+    setState({ device: registered });
+    wsClient.disconnect();
+    wsClient.connect();
+  } catch (error) {
+    if (allowIdentityReset && isRecoverableDeviceRegistrationError(error?.message || "")) {
+      resetDeviceIdentity();
+      return registerCurrentDeviceInternal(false);
+    }
+    throw error;
+  }
 }
 
 async function refreshDevices() {
@@ -429,6 +464,41 @@ async function checkServerHealth() {
     setState({ serverReachable: false });
     return false;
   }
+}
+
+async function recoverDeviceIdentity(trigger) {
+  if (!state.tokens?.access_token || recoveringDeviceIdentity) {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastDeviceRecoveryAt < 20000) {
+    return;
+  }
+  lastDeviceRecoveryAt = now;
+  recoveringDeviceIdentity = true;
+
+  try {
+    ui.log(`${trigger}. Renovando identidade deste dispositivo...`);
+    resetDeviceIdentity();
+    await registerCurrentDeviceInternal(false);
+    await refreshDevices();
+    ui.log("Identidade do dispositivo renovada com sucesso.");
+  } catch (error) {
+    ui.log(`Falha ao renovar identidade do dispositivo: ${error.message || error}`);
+  } finally {
+    recoveringDeviceIdentity = false;
+  }
+}
+
+function isRecoverableDeviceRegistrationError(message) {
+  const lower = String(message || "").toLowerCase();
+  return (
+    lower.includes("device already belongs to another user") ||
+    lower.includes("device identity mismatch") ||
+    lower.includes("device authentication failed") ||
+    lower.includes("invalid device authentication")
+  );
 }
 
 function humanizeNetworkError(error) {

@@ -4,6 +4,13 @@ const USER_KEY = "ra_mvp_user";
 const DEVICE_KEY = "ra_mvp_device_id";
 const DEVICE_AUTH_KEY = "ra_mvp_device_auth_key";
 
+function generateUUIDCompat() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
+}
+
 export function normalizeServerUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -93,7 +100,7 @@ export function getDeviceId() {
   if (existing) {
     return existing;
   }
-  const newId = `dev_local_${crypto.randomUUID()}`;
+  const newId = `dev_local_${generateUUIDCompat()}`;
   localStorage.setItem(DEVICE_KEY, newId);
   return newId;
 }
@@ -103,9 +110,18 @@ export function getDeviceAuthKey() {
   if (existing) {
     return existing;
   }
-  const randomChunk = `${crypto.randomUUID()}${crypto.randomUUID().replaceAll("-", "")}`;
+  const randomChunk = `${generateUUIDCompat()}${generateUUIDCompat().replaceAll("-", "")}`;
   const newKey = `dkey_${randomChunk}`;
   localStorage.setItem(DEVICE_AUTH_KEY, newKey);
   return newKey;
+}
+
+export function resetDeviceIdentity() {
+  localStorage.removeItem(DEVICE_KEY);
+  localStorage.removeItem(DEVICE_AUTH_KEY);
+  return {
+    deviceId: getDeviceId(),
+    deviceAuthKey: getDeviceAuthKey()
+  };
 }
 
