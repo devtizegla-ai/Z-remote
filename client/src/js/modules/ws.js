@@ -37,8 +37,7 @@ class WSClient {
       `${wsBase}/ws?device_id=${encodeURIComponent(state.device.id)}` +
       `&token=${encodeURIComponent(accessToken)}` +
       `&device_key=${encodeURIComponent(deviceKey)}`;
-    const protocols = [`access.${accessToken}`, `dkey.${deviceKey}`];
-    const socket = new WebSocket(url, protocols);
+    const socket = new WebSocket(url);
     this.socket = socket;
 
     socket.onopen = () => {
