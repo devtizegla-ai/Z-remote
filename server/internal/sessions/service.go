@@ -59,13 +59,6 @@ func (s *Service) Request(ctx context.Context, userID, requesterDeviceID, target
 	if !requesterOwned {
 		return models.SessionRequest{}, ErrSessionUnauthorized
 	}
-	targetOwned, err := s.devicesService.BelongsToUser(ctx, targetDeviceID, userID)
-	if err != nil {
-		return models.SessionRequest{}, err
-	}
-	if !targetOwned {
-		return models.SessionRequest{}, ErrSessionUnauthorized
-	}
 
 	targetDevice, err := s.devicesService.GetByID(ctx, targetDeviceID)
 	if err != nil {

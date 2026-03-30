@@ -83,6 +83,20 @@ func newTestService(t *testing.T) (*Service, func()) {
 	}
 
 	_, err = store.DB.Exec(`
+		CREATE TABLE users (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		);`)
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("create users table: %v", err)
+	}
+
+	_, err = store.DB.Exec(`
 		CREATE TABLE devices (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,

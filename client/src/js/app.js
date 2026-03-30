@@ -271,7 +271,7 @@ async function refreshDevices() {
     return;
   }
   try {
-    const result = await apiRequest("/api/devices", { method: "GET" });
+    const result = await apiRequest("/api/devices?scope=global", { method: "GET" });
     setState({ devices: result.devices || [] });
     ui.renderDevices(onConnectToDevice);
   } catch (error) {

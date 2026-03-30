@@ -14,6 +14,7 @@ type User struct {
 type Device struct {
 	ID            string    `json:"id"`
 	UserID        string    `json:"user_id"`
+	OwnerName     string    `json:"owner_name,omitempty"`
 	DeviceName    string    `json:"device_name"`
 	MachineName   string    `json:"machine_name"`
 	MACAddress    string    `json:"mac_address,omitempty"`

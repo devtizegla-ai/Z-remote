@@ -82,11 +82,7 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 	if err != nil {
 		return models.FileTransfer{}, err
 	}
-	toOwned, err := s.devices.BelongsToUser(ctx, input.ToDeviceID, input.UserID)
-	if err != nil {
-		return models.FileTransfer{}, err
-	}
-	if !fromOwned || !toOwned {
+	if !fromOwned {
 		return models.FileTransfer{}, sessions.ErrSessionUnauthorized
 	}
 

@@ -247,6 +247,51 @@ func (s *Service) ListByUser(ctx context.Context, userID string, onlineOnly bool
 	return devices, rows.Err()
 }
 
+func (s *Service) ListOnlineGlobal(ctx context.Context, excludeDeviceID string) ([]models.Device, error) {
+	excludeDeviceID = strings.TrimSpace(excludeDeviceID)
+	query := `
+		SELECT d.id, d.user_id, u.name, d.device_name, d.machine_name, d.mac_address, d.platform, d.app_version, d.status, d.device_key_hash, d.last_seen_at, d.created_at, d.updated_at
+		FROM devices d
+		JOIN users u ON u.id = d.user_id
+		WHERE d.status = 'online'`
+	args := []any{}
+	if excludeDeviceID != "" {
+		query += " AND d.id <> ?"
+		args = append(args, excludeDeviceID)
+	}
+	query += " ORDER BY d.last_seen_at DESC"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	devices := []models.Device{}
+	for rows.Next() {
+		var d models.Device
+		if err := rows.Scan(
+			&d.ID,
+			&d.UserID,
+			&d.OwnerName,
+			&d.DeviceName,
+			&d.MachineName,
+			&d.MACAddress,
+			&d.Platform,
+			&d.AppVersion,
+			&d.Status,
+			&d.DeviceKeyHash,
+			&d.LastSeenAt,
+			&d.CreatedAt,
+			&d.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		devices = append(devices, d)
+	}
+	return devices, rows.Err()
+}
+
 func (s *Service) SetStatus(ctx context.Context, deviceID, status string) error {
 	now := storage.NowUTC()
 	_, err := s.db.ExecContext(

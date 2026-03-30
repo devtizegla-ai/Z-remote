@@ -77,6 +77,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Get("scope") == "global" {
+		deviceID, _ := apphttp.DeviceIDFromContext(r.Context())
+		devices, err := h.service.ListOnlineGlobal(r.Context(), deviceID)
+		if err != nil {
+			apphttp.WriteError(w, http.StatusInternalServerError, "failed to list global devices")
+			return
+		}
+		apphttp.WriteJSON(w, http.StatusOK, map[string]any{"devices": devices})
+		return
+	}
+
 	onlineOnly := r.URL.Query().Get("all") != "true"
 	devices, err := h.service.ListByUser(r.Context(), userID, onlineOnly)
 	if err != nil {

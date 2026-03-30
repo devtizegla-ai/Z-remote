@@ -89,7 +89,8 @@ export function createUI() {
 
       const info = document.createElement("div");
       const title = document.createElement("strong");
-      title.textContent = device.device_name;
+      const ownerPrefix = device.owner_name ? `${device.owner_name} - ` : "";
+      title.textContent = `${ownerPrefix}${device.device_name}`;
       const details = document.createElement("p");
       details.className = "muted";
       details.textContent = `${device.machine_name || "host"} - ${device.platform} - ${device.status}`;
