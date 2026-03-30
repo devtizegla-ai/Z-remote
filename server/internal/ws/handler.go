@@ -13,4 +13,3 @@ func NewHandler(hub *Hub) *Handler {
 func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	h.hub.HandleWS(w, r)
 }
-

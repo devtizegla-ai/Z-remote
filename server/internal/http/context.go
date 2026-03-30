@@ -5,7 +5,7 @@ import "context"
 type contextKey string
 
 const (
-	ContextUserID  contextKey = "user_id"
+	ContextUserID   contextKey = "user_id"
 	ContextDeviceID contextKey = "device_id"
 )
 
@@ -18,4 +18,3 @@ func DeviceIDFromContext(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(ContextDeviceID).(string)
 	return value, ok
 }
-

@@ -71,4 +71,3 @@ func (m *TokenManager) Parse(tokenStr string) (*Claims, error) {
 	}
 	return claims, nil
 }
-

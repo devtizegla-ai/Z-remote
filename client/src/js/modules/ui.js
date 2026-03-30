@@ -75,7 +75,10 @@ export function createUI() {
   function renderDevices(onConnect) {
     elements.devicesList.innerHTML = "";
     if (!state.devices.length) {
-      elements.devicesList.innerHTML = `<p class="muted">Nenhum dispositivo online.</p>`;
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "Nenhum dispositivo online.";
+      elements.devicesList.appendChild(empty);
       return;
     }
 
@@ -83,12 +86,17 @@ export function createUI() {
       const card = document.createElement("div");
       card.className = "device-card";
       const isSelf = state.device && device.id === state.device.id;
-      card.innerHTML = `
-        <div>
-          <strong>${device.device_name}</strong>
-          <p class="muted">${device.platform} · ${device.status}</p>
-        </div>
-      `;
+
+      const info = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = device.device_name;
+      const details = document.createElement("p");
+      details.className = "muted";
+      details.textContent = `${device.machine_name || "host"} - ${device.platform} - ${device.status}`;
+      info.appendChild(title);
+      info.appendChild(details);
+      card.appendChild(info);
+
       const button = document.createElement("button");
       button.className = "btn";
       button.textContent = isSelf ? "Este dispositivo" : "Conectar";
@@ -104,7 +112,10 @@ export function createUI() {
     for (const item of state.incomingFiles) {
       const row = document.createElement("div");
       row.className = "file-row";
-      row.innerHTML = `<span>${item.filename} (${Math.round(item.size_bytes / 1024)} KB)</span>`;
+      const fileText = document.createElement("span");
+      fileText.textContent = `${item.filename} (${Math.round(item.size_bytes / 1024)} KB)`;
+      row.appendChild(fileText);
+
       const button = document.createElement("button");
       button.className = "btn";
       button.textContent = "Baixar";
@@ -120,9 +131,15 @@ export function createUI() {
     elements.appSection.classList.toggle("hidden", !logged);
 
     if (logged) {
-      elements.connectionBadge.textContent = state.wsConnected ? "Sessao Online" : "Sessao Offline";
-      elements.connectionBadge.classList.toggle("connected", state.wsConnected);
-      elements.connectionBadge.classList.toggle("disconnected", !state.wsConnected);
+      const serverReady = state.serverReachable === true;
+      const online = state.wsConnected || serverReady;
+      elements.connectionBadge.textContent = state.wsConnected
+        ? "Sessao Online"
+        : serverReady
+          ? "Servidor OK (WS reconectando)"
+          : "Sessao Offline";
+      elements.connectionBadge.classList.toggle("connected", online);
+      elements.connectionBadge.classList.toggle("disconnected", !online);
     } else {
       const serverReady = state.serverReachable === true;
       elements.connectionBadge.textContent = serverReady ? "Servidor OK" : "Servidor Indisponivel";
@@ -130,14 +147,14 @@ export function createUI() {
       elements.connectionBadge.classList.toggle("disconnected", !serverReady);
     }
 
-    elements.userLabel.textContent = state.user?.name || "Usuário";
+    elements.userLabel.textContent = state.user?.name || "Usuario";
     elements.deviceLabel.textContent = state.device?.device_name || "Dispositivo";
 
     const hasSession = Boolean(state.activeSession);
     elements.sessionCard.classList.toggle("hidden", !hasSession);
     if (hasSession) {
       const role = state.activeSession.requester_device_id === state.device.id ? "controller" : "host";
-      elements.sessionMeta.textContent = `Sessão ${state.activeSession.id} · Perfil: ${role}`;
+      elements.sessionMeta.textContent = `Sessao ${state.activeSession.id} - Perfil: ${role}`;
     } else {
       elements.remoteFrame.removeAttribute("src");
       elements.incomingFiles.innerHTML = "";
@@ -145,7 +162,7 @@ export function createUI() {
 
     if (state.pendingRequest) {
       elements.requestModal.classList.remove("hidden");
-      elements.requestModalText.textContent = `Dispositivo ${state.pendingRequest.requester_device_id} quer iniciar conexão.`;
+      elements.requestModalText.textContent = `Dispositivo ${state.pendingRequest.requester_device_id} quer iniciar conexao.`;
     } else {
       elements.requestModal.classList.add("hidden");
     }
@@ -184,6 +201,19 @@ export function createUI() {
     elements.authMessage.classList.remove("error", "success");
   }
 
+  function setAuthLoading(loading) {
+    const loginBtn = elements.loginForm.querySelector("button[type='submit']");
+    const registerBtn = elements.registerForm.querySelector("button[type='submit']");
+    if (loginBtn) {
+      loginBtn.disabled = loading;
+      loginBtn.textContent = loading ? "Entrando..." : "Entrar";
+    }
+    if (registerBtn) {
+      registerBtn.disabled = loading;
+      registerBtn.textContent = loading ? "Criando..." : "Criar conta";
+    }
+  }
+
   return {
     elements,
     showTab,
@@ -195,7 +225,7 @@ export function createUI() {
     showSettings,
     updateUploadProgress,
     setAuthMessage,
-    clearAuthMessage
+    clearAuthMessage,
+    setAuthLoading
   };
 }
-

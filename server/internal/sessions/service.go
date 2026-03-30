@@ -104,7 +104,7 @@ func (s *Service) Request(ctx context.Context, userID, requesterDeviceID, target
 
 	if s.notifier != nil {
 		_ = s.notifier.NotifyDevice(targetDeviceID, map[string]any{
-			"type": "session_request",
+			"type":    "session_request",
 			"request": request,
 		})
 	}
@@ -158,7 +158,7 @@ func (s *Service) Respond(ctx context.Context, userID, requestID, targetDeviceID
 
 	if s.notifier != nil {
 		_ = s.notifier.NotifyDevice(request.RequesterDeviceID, map[string]any{
-			"type": "session_response",
+			"type":    "session_response",
 			"request": request,
 		})
 	}
@@ -216,9 +216,9 @@ func (s *Service) Start(ctx context.Context, userID, requestID, requesterDeviceI
 	}
 
 	s.logAudit(ctx, userID, requesterDeviceID, "remote_session_started", map[string]any{
-		"session_id":        session.ID,
-		"target_device_id":  session.TargetDeviceID,
-		"token_expires_at":  tokenExpiry,
+		"session_id":         session.ID,
+		"target_device_id":   session.TargetDeviceID,
+		"token_expires_at":   tokenExpiry,
 		"session_request_id": requestID,
 	})
 
@@ -381,4 +381,3 @@ func (s *Service) logAudit(ctx context.Context, userID, deviceID, action string,
 		storage.NowUTC(),
 	)
 }
-

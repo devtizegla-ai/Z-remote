@@ -18,4 +18,3 @@ type OutgoingMessage struct {
 	Kind       string `json:"kind,omitempty"`
 	Payload    any    `json:"payload,omitempty"`
 }
-

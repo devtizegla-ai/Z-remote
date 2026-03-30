@@ -17,25 +17,27 @@ func NewHandler(service *Service) *Handler {
 }
 
 type requestBody struct {
-	RequesterDeviceID string `json:"requester_device_id"`
-	TargetDeviceID    string `json:"target_device_id"`
+	TargetDeviceID string `json:"target_device_id"`
 }
 
 type respondBody struct {
-	RequestID      string `json:"request_id"`
-	TargetDeviceID string `json:"target_device_id"`
-	Accept         bool   `json:"accept"`
+	RequestID string `json:"request_id"`
+	Accept    bool   `json:"accept"`
 }
 
 type startBody struct {
-	RequestID         string `json:"request_id"`
-	RequesterDeviceID string `json:"requester_device_id"`
+	RequestID string `json:"request_id"`
 }
 
 func (h *Handler) Request(w http.ResponseWriter, r *http.Request) {
 	userID, ok := apphttp.UserIDFromContext(r.Context())
 	if !ok || userID == "" {
 		apphttp.WriteError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+	deviceID, ok := apphttp.DeviceIDFromContext(r.Context())
+	if !ok || deviceID == "" {
+		apphttp.WriteError(w, http.StatusUnauthorized, "missing device context")
 		return
 	}
 
@@ -45,7 +47,7 @@ func (h *Handler) Request(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.Request(r.Context(), userID, req.RequesterDeviceID, req.TargetDeviceID)
+	item, err := h.service.Request(r.Context(), userID, deviceID, req.TargetDeviceID)
 	if err != nil {
 		h.handleServiceError(w, err)
 		return
@@ -60,6 +62,11 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
+	deviceID, ok := apphttp.DeviceIDFromContext(r.Context())
+	if !ok || deviceID == "" {
+		apphttp.WriteError(w, http.StatusUnauthorized, "missing device context")
+		return
+	}
 
 	var req respondBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -67,7 +74,7 @@ func (h *Handler) Respond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.Respond(r.Context(), userID, req.RequestID, req.TargetDeviceID, req.Accept)
+	item, err := h.service.Respond(r.Context(), userID, req.RequestID, deviceID, req.Accept)
 	if err != nil {
 		h.handleServiceError(w, err)
 		return
@@ -82,6 +89,11 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
+	deviceID, ok := apphttp.DeviceIDFromContext(r.Context())
+	if !ok || deviceID == "" {
+		apphttp.WriteError(w, http.StatusUnauthorized, "missing device context")
+		return
+	}
 
 	var req startBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -89,7 +101,7 @@ func (h *Handler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := h.service.Start(r.Context(), userID, req.RequestID, req.RequesterDeviceID)
+	session, err := h.service.Start(r.Context(), userID, req.RequestID, deviceID)
 	if err != nil {
 		h.handleServiceError(w, err)
 		return
@@ -126,4 +138,3 @@ func (h *Handler) handleServiceError(w http.ResponseWriter, err error) {
 		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 	}
 }
-

@@ -132,4 +132,3 @@ func (s *Service) findByEmail(ctx context.Context, email string) (models.User, e
 	}
 	return user, nil
 }
-

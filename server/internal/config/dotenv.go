@@ -38,4 +38,3 @@ func LoadDotEnv(path string) error {
 	}
 	return scanner.Err()
 }
-

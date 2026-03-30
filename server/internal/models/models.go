@@ -12,15 +12,18 @@ type User struct {
 }
 
 type Device struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	DeviceName string    `json:"device_name"`
-	Platform   string    `json:"platform"`
-	AppVersion string    `json:"app_version"`
-	Status     string    `json:"status"`
-	LastSeenAt time.Time `json:"last_seen_at"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	UserID        string    `json:"user_id"`
+	DeviceName    string    `json:"device_name"`
+	MachineName   string    `json:"machine_name"`
+	MACAddress    string    `json:"mac_address,omitempty"`
+	Platform      string    `json:"platform"`
+	AppVersion    string    `json:"app_version"`
+	Status        string    `json:"status"`
+	DeviceKeyHash string    `json:"-"`
+	LastSeenAt    time.Time `json:"last_seen_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type SessionRequest struct {
@@ -44,15 +47,15 @@ type RemoteSession struct {
 }
 
 type FileTransfer struct {
-	ID                  string    `json:"id"`
-	SessionID           string    `json:"session_id"`
-	Filename            string    `json:"filename"`
-	SizeBytes           int64     `json:"size_bytes"`
-	Status              string    `json:"status"`
-	StoragePath         string    `json:"-"`
-	UploadedByDeviceID  string    `json:"uploaded_by_device_id"`
-	TargetDeviceID      string    `json:"target_device_id"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                 string    `json:"id"`
+	SessionID          string    `json:"session_id"`
+	Filename           string    `json:"filename"`
+	SizeBytes          int64     `json:"size_bytes"`
+	Status             string    `json:"status"`
+	StoragePath        string    `json:"-"`
+	UploadedByDeviceID string    `json:"uploaded_by_device_id"`
+	TargetDeviceID     string    `json:"target_device_id"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type AuditLog struct {
@@ -63,4 +66,3 @@ type AuditLog struct {
 	MetadataJSON string    `json:"metadata_json"`
 	CreatedAt    time.Time `json:"created_at"`
 }
-

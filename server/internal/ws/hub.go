@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,30 +36,44 @@ type Hub struct {
 	tokens          *auth.TokenManager
 	devicesService  *devices.Service
 	sessionsService *sessions.Service
+	allowedOrigins  map[string]struct{}
+	allowAllOrigins bool
 	upgrader        websocket.Upgrader
 }
 
-func NewHub(tokens *auth.TokenManager, devicesService *devices.Service, sessionsService *sessions.Service) *Hub {
-	return &Hub{
+func NewHub(tokens *auth.TokenManager, devicesService *devices.Service, sessionsService *sessions.Service, allowedOrigins []string) *Hub {
+	hub := &Hub{
 		clients:         make(map[string]*Client),
 		tokens:          tokens,
 		devicesService:  devicesService,
 		sessionsService: sessionsService,
+		allowedOrigins:  make(map[string]struct{}, len(allowedOrigins)),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				return true
-			},
+			CheckOrigin:     nil,
 		},
 	}
+	for _, origin := range allowedOrigins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" {
+			hub.allowAllOrigins = true
+		}
+		hub.allowedOrigins[trimmed] = struct{}{}
+	}
+	hub.upgrader.CheckOrigin = hub.checkOrigin
+	return hub
 }
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
 	deviceID := r.URL.Query().Get("device_id")
-	if token == "" || deviceID == "" {
-		http.Error(w, "token and device_id are required", http.StatusBadRequest)
+	token, deviceKey := parseAuthFromSubprotocols(websocket.Subprotocols(r))
+
+	if token == "" || deviceID == "" || deviceKey == "" {
+		http.Error(w, "token, device_id and device_key are required", http.StatusBadRequest)
 		return
 	}
 
@@ -68,8 +83,8 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	device, err := h.devicesService.GetByID(r.Context(), deviceID)
-	if err != nil || device.UserID != claims.UserID {
+	_, err = h.devicesService.Authenticate(r.Context(), claims.UserID, deviceID, deviceKey)
+	if err != nil {
 		http.Error(w, "device not found", http.StatusForbidden)
 		return
 	}
@@ -97,6 +112,21 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	welcome := OutgoingMessage{Type: "ws_ready", Payload: map[string]any{"device_id": deviceID}}
 	bytes, _ := json.Marshal(welcome)
 	client.send <- bytes
+}
+
+func (h *Hub) checkOrigin(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		// Desktop native clients can omit Origin.
+		return true
+	}
+	if h.allowAllOrigins {
+		return true
+	}
+	if _, ok := h.allowedOrigins[origin]; ok {
+		return true
+	}
+	return isTauriOrigin(origin)
 }
 
 func (h *Hub) register(client *Client) {
@@ -257,3 +287,21 @@ func (c *Client) sendError(code, message string) {
 	}
 }
 
+func parseAuthFromSubprotocols(values []string) (token string, deviceKey string) {
+	for _, value := range values {
+		switch {
+		case strings.HasPrefix(value, "access."):
+			token = strings.TrimPrefix(value, "access.")
+		case strings.HasPrefix(value, "dkey."):
+			deviceKey = strings.TrimPrefix(value, "dkey.")
+		}
+	}
+	return token, deviceKey
+}
+
+func isTauriOrigin(origin string) bool {
+	return strings.HasPrefix(origin, "tauri://") ||
+		strings.HasSuffix(origin, ".tauri.localhost") ||
+		origin == "http://tauri.localhost" ||
+		origin == "https://tauri.localhost"
+}

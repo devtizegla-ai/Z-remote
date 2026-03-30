@@ -3,6 +3,7 @@ package auth
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 
 func (r *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ip := clientIP(req.RemoteAddr)
+		ip := clientIP(req)
 		if !r.allow(ip) {
 			apphttp.WriteError(w, http.StatusTooManyRequests, "too many login attempts, try again later")
 			return
@@ -58,11 +59,22 @@ func (r *RateLimiter) allow(key string) bool {
 	return true
 }
 
-func clientIP(remoteAddr string) string {
-	host, _, err := net.SplitHostPort(remoteAddr)
+func clientIP(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	if xff := strings.TrimSpace(req.Header.Get("X-Forwarded-For")); xff != "" {
+		first := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if first != "" {
+			return first
+		}
+	}
+	if xri := strings.TrimSpace(req.Header.Get("X-Real-IP")); xri != "" {
+		return xri
+	}
+	host, _, err := net.SplitHostPort(req.RemoteAddr)
 	if err != nil {
-		return remoteAddr
+		return req.RemoteAddr
 	}
 	return host
 }
-

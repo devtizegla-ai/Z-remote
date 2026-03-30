@@ -3,6 +3,7 @@ import { apiRequest } from "./modules/api.js";
 import {
   clearTokens,
   clearUser,
+  getDeviceAuthKey,
   getDeviceId,
   loadSettings,
   loadTokens,
@@ -114,8 +115,7 @@ function bindWSHandlers() {
         const started = await apiRequest("/api/sessions/start", {
           method: "POST",
           body: JSON.stringify({
-            request_id: request.id,
-            requester_device_id: state.device.id
+            request_id: request.id
           })
         });
         setState({ activeSession: started.remote_session || started.session || null });
@@ -166,13 +166,14 @@ function bindWSHandlers() {
 async function onLogin(event) {
   event.preventDefault();
   ui.setAuthMessage("Tentando login (pode levar ate 1 min no Render free)...", "info");
+  ui.setAuthLoading(true);
   await checkServerHealth();
   try {
     const payload = await apiRequest("/api/auth/login", {
       method: "POST",
-      timeoutMs: 25000,
-      retryAttempts: 4,
-      retryDelayMs: 7000,
+      timeoutMs: 12000,
+      retryAttempts: 2,
+      retryDelayMs: 2500,
       body: JSON.stringify({
         email: ui.elements.loginEmail.value.trim(),
         password: ui.elements.loginPassword.value
@@ -192,19 +193,22 @@ async function onLogin(event) {
     const message = humanizeNetworkError(error);
     ui.log(`Falha no login: ${message}`);
     ui.setAuthMessage(`Falha no login: ${message}`, "error");
+  } finally {
+    ui.setAuthLoading(false);
   }
 }
 
 async function onRegister(event) {
   event.preventDefault();
   ui.setAuthMessage("Criando conta (pode levar ate 1 min no Render free)...", "info");
+  ui.setAuthLoading(true);
   await checkServerHealth();
   try {
     await apiRequest("/api/auth/register", {
       method: "POST",
-      timeoutMs: 25000,
-      retryAttempts: 4,
-      retryDelayMs: 7000,
+      timeoutMs: 12000,
+      retryAttempts: 2,
+      retryDelayMs: 2500,
       body: JSON.stringify({
         name: ui.elements.registerName.value.trim(),
         email: ui.elements.registerEmail.value.trim(),
@@ -218,12 +222,20 @@ async function onRegister(event) {
     const message = humanizeNetworkError(error);
     ui.log(`Falha no cadastro: ${message}`);
     ui.setAuthMessage(`Falha no cadastro: ${message}`, "error");
+  } finally {
+    ui.setAuthLoading(false);
   }
 }
 
 async function registerCurrentDevice() {
   const deviceId = getDeviceId();
-  let runtimeInfo = { platform: navigator.platform || "unknown", app_version: import.meta.env.VITE_APP_VERSION || "0.1.0" };
+  const deviceAuthKey = getDeviceAuthKey();
+  let runtimeInfo = {
+    platform: navigator.platform || "unknown",
+    app_version: import.meta.env.VITE_APP_VERSION || "0.1.0",
+    machine_name: state.settings.deviceName,
+    mac_address: ""
+  };
   try {
     runtimeInfo = await invoke("get_runtime_info");
   } catch {
@@ -233,11 +245,14 @@ async function registerCurrentDevice() {
   const registered = await apiRequest("/api/devices/register", {
     method: "POST",
     headers: {
-      "X-Device-ID": deviceId
+      "X-Device-ID": deviceId,
+      "X-Device-Key": deviceAuthKey
     },
     body: JSON.stringify({
       device_id: deviceId,
       device_name: state.settings.deviceName,
+      machine_name: runtimeInfo.machine_name || runtimeInfo.hostname || state.settings.deviceName,
+      mac_address: runtimeInfo.mac_address || "",
       platform: runtimeInfo.platform || "unknown",
       app_version: runtimeInfo.app_version || import.meta.env.VITE_APP_VERSION || "0.1.0"
     })
@@ -266,7 +281,6 @@ async function onConnectToDevice(device) {
     const response = await apiRequest("/api/sessions/request", {
       method: "POST",
       body: JSON.stringify({
-        requester_device_id: state.device.id,
         target_device_id: device.id
       })
     });
@@ -286,7 +300,6 @@ async function onRespondRequest(accept) {
       method: "POST",
       body: JSON.stringify({
         request_id: state.pendingRequest.id,
-        target_device_id: state.device.id,
         accept
       })
     });
@@ -323,9 +336,12 @@ async function onDownloadTransfer(transferId) {
 }
 
 function onSaveSettings() {
+  const previous = state.settings || {};
+  const serverUrl = ui.elements.settingsServerUrl.value.trim();
+  const deviceName = ui.elements.settingsDeviceName.value.trim();
   const updated = {
-    serverUrl: ui.elements.settingsServerUrl.value.trim(),
-    deviceName: ui.elements.settingsDeviceName.value.trim(),
+    serverUrl: serverUrl || previous.serverUrl,
+    deviceName: deviceName || previous.deviceName,
     autoStartPrepared: ui.elements.settingsAutoStart.checked
   };
   saveSettings(updated);

@@ -2,6 +2,7 @@ package devices
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	apphttp "remoteaccess/server/internal/http"
@@ -16,10 +17,12 @@ func NewHandler(service *Service) *Handler {
 }
 
 type registerRequest struct {
-	DeviceID   string `json:"device_id"`
-	DeviceName string `json:"device_name"`
-	Platform   string `json:"platform"`
-	AppVersion string `json:"app_version"`
+	DeviceID    string `json:"device_id"`
+	DeviceName  string `json:"device_name"`
+	MachineName string `json:"machine_name"`
+	MACAddress  string `json:"mac_address"`
+	Platform    string `json:"platform"`
+	AppVersion  string `json:"app_version"`
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -35,15 +38,32 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deviceID := req.DeviceID
+	if ctxDeviceID, ok := apphttp.DeviceIDFromContext(r.Context()); ok && ctxDeviceID != "" {
+		if deviceID != "" && deviceID != ctxDeviceID {
+			apphttp.WriteError(w, http.StatusBadRequest, "device_id in body does not match authenticated device")
+			return
+		}
+		deviceID = ctxDeviceID
+	}
+
 	device, err := h.service.Register(r.Context(), RegisterInput{
-		DeviceID:   req.DeviceID,
-		UserID:     userID,
-		DeviceName: req.DeviceName,
-		Platform:   req.Platform,
-		AppVersion: req.AppVersion,
+		DeviceID:    deviceID,
+		UserID:      userID,
+		DeviceName:  req.DeviceName,
+		MachineName: req.MachineName,
+		MACAddress:  req.MACAddress,
+		Platform:    req.Platform,
+		AppVersion:  req.AppVersion,
+		DeviceKey:   r.Header.Get("X-Device-Key"),
 	})
 	if err != nil {
-		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
+		switch {
+		case errors.Is(err, ErrDeviceOwnershipConflict), errors.Is(err, ErrDeviceIdentityMismatch), errors.Is(err, ErrDeviceAuthFailed):
+			apphttp.WriteError(w, http.StatusForbidden, err.Error())
+		default:
+			apphttp.WriteError(w, http.StatusBadRequest, err.Error())
+		}
 		return
 	}
 
@@ -66,4 +86,3 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	apphttp.WriteJSON(w, http.StatusOK, map[string]any{"devices": devices})
 }
-

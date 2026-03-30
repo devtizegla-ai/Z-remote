@@ -6,14 +6,28 @@ struct RuntimeInfo {
     platform: String,
     arch: String,
     app_version: String,
+    machine_name: String,
+    mac_address: String,
 }
 
 #[tauri::command]
 fn get_runtime_info(app: tauri::AppHandle) -> RuntimeInfo {
+    let machine_name = hostname::get()
+        .ok()
+        .and_then(|name| name.into_string().ok())
+        .unwrap_or_else(|| "unknown".to_string());
+    let mac_address = mac_address::get_mac_address()
+        .ok()
+        .flatten()
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+
     RuntimeInfo {
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         app_version: app.package_info().version.to_string(),
+        machine_name,
+        mac_address,
     }
 }
 

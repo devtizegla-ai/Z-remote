@@ -96,4 +96,3 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"updated_at": user.UpdatedAt,
 	})
 }
-

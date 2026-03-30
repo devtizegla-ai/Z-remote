@@ -22,6 +22,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		apphttp.WriteError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
+	deviceID, ok := apphttp.DeviceIDFromContext(r.Context())
+	if !ok || deviceID == "" {
+		apphttp.WriteError(w, http.StatusUnauthorized, "missing device context")
+		return
+	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		apphttp.WriteError(w, http.StatusBadRequest, "invalid multipart form")
@@ -32,6 +37,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	sessionToken := r.FormValue("session_token")
 	fromDeviceID := r.FormValue("from_device_id")
 	toDeviceID := r.FormValue("to_device_id")
+	if fromDeviceID != "" && fromDeviceID != deviceID {
+		apphttp.WriteError(w, http.StatusBadRequest, "from_device_id does not match authenticated device")
+		return
+	}
+	fromDeviceID = deviceID
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -93,4 +103,3 @@ func (h *Handler) handleError(w http.ResponseWriter, err error) {
 		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
 	}
 }
-

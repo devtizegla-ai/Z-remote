@@ -1,3 +1,4 @@
+import { getDeviceAuthKey, getDeviceId } from "./config.js";
 import { state } from "./state.js";
 
 export async function apiRequest(path, options = {}) {
@@ -9,6 +10,8 @@ export async function apiRequest(path, options = {}) {
 
   if (state.tokens?.access_token) {
     headers.Authorization = `Bearer ${state.tokens.access_token}`;
+    headers["X-Device-ID"] = getDeviceId();
+    headers["X-Device-Key"] = getDeviceAuthKey();
   }
 
   const response = await fetchWithRetry(url, {

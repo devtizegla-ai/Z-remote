@@ -157,10 +157,10 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 		_ = s.notifier.NotifyDevice(input.ToDeviceID, map[string]any{
 			"type": "file_available",
 			"file": map[string]any{
-				"id":         transfer.ID,
-				"session_id": transfer.SessionID,
-				"filename":   transfer.Filename,
-				"size_bytes": transfer.SizeBytes,
+				"id":             transfer.ID,
+				"session_id":     transfer.SessionID,
+				"filename":       transfer.Filename,
+				"size_bytes":     transfer.SizeBytes,
 				"from_device_id": input.FromDeviceID,
 			},
 		})
@@ -243,4 +243,3 @@ func sanitizeFilename(name string) string {
 	}
 	return name
 }
-

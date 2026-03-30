@@ -13,9 +13,9 @@ import (
 
 	"remoteaccess/server/internal/auth"
 	"remoteaccess/server/internal/config"
-	apphttp "remoteaccess/server/internal/http"
 	"remoteaccess/server/internal/devices"
 	"remoteaccess/server/internal/files"
+	apphttp "remoteaccess/server/internal/http"
 	"remoteaccess/server/internal/sessions"
 	"remoteaccess/server/internal/storage"
 	"remoteaccess/server/internal/ws"
@@ -57,7 +57,7 @@ func main() {
 		}
 	}
 
-	hub := ws.NewHub(tokenManager, devicesService, sessionsService)
+	hub := ws.NewHub(tokenManager, devicesService, sessionsService, cfg.CORSAllowedOrigins)
 	sessionsService.SetNotifier(hub)
 	filesService.SetNotifier(hub)
 
@@ -68,12 +68,14 @@ func main() {
 	wsHandler := ws.NewHandler(hub)
 
 	loginLimiter := auth.NewRateLimiter(cfg.LoginRateLimit, cfg.LoginRateWindow)
-	authMW := auth.Middleware(tokenManager)
+	authMW := auth.Middleware(tokenManager, devicesService)
 	router := apphttp.NewRouter(cfg, apphttp.RouteHandlers{
-		Health:       http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"}) }),
-		AuthRegister: http.HandlerFunc(authHandler.Register),
-		AuthLogin:    loginLimiter.Middleware(http.HandlerFunc(authHandler.Login)),
-		Me:           authMW(http.HandlerFunc(authHandler.Me)),
+		Health: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			apphttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+		}),
+		AuthRegister:    http.HandlerFunc(authHandler.Register),
+		AuthLogin:       loginLimiter.Middleware(http.HandlerFunc(authHandler.Login)),
+		Me:              authMW(http.HandlerFunc(authHandler.Me)),
 		DevicesRegister: authMW(http.HandlerFunc(devicesHandler.Register)),
 		DevicesList:     authMW(http.HandlerFunc(devicesHandler.List)),
 		SessionsRequest: authMW(http.HandlerFunc(sessionsHandler.Request)),
@@ -157,4 +159,3 @@ func ensureDevSeed(ctx context.Context, store *storage.Store, devicesService *de
 	})
 	return nil
 }
-

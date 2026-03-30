@@ -1,3 +1,4 @@
+import { getDeviceAuthKey, getDeviceId } from "./config.js";
 import { state } from "./state.js";
 
 export function uploadSessionFile(file, onProgress) {
@@ -22,6 +23,8 @@ export function uploadSessionFile(file, onProgress) {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${state.settings.serverUrl}/api/files/upload`);
     xhr.setRequestHeader("Authorization", `Bearer ${state.tokens.access_token}`);
+    xhr.setRequestHeader("X-Device-ID", getDeviceId());
+    xhr.setRequestHeader("X-Device-Key", getDeviceAuthKey());
 
     xhr.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable) {
@@ -54,7 +57,9 @@ export async function downloadTransfer(transferId) {
     `${state.settings.serverUrl}/api/files/download?transfer_id=${encodeURIComponent(transferId)}`,
     {
       headers: {
-        Authorization: `Bearer ${state.tokens.access_token}`
+        Authorization: `Bearer ${state.tokens.access_token}`,
+        "X-Device-ID": getDeviceId(),
+        "X-Device-Key": getDeviceAuthKey()
       }
     }
   );

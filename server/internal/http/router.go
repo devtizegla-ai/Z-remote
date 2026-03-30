@@ -60,4 +60,3 @@ func methodHandler(expected string, next nethttp.Handler) nethttp.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-

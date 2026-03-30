@@ -74,7 +74,8 @@ func CORSMiddleware(allowedOrigins []string) Middleware {
 func isTauriOrigin(origin string) bool {
 	return strings.HasPrefix(origin, "tauri://") ||
 		strings.HasSuffix(origin, ".tauri.localhost") ||
-		strings.Contains(origin, "tauri.localhost")
+		origin == "http://tauri.localhost" ||
+		origin == "https://tauri.localhost"
 }
 
 type statusWriter struct {

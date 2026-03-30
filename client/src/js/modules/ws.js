@@ -1,9 +1,11 @@
+import { getDeviceAuthKey } from "./config.js";
 import { state, setState } from "./state.js";
 
 class WSClient {
   constructor() {
     this.socket = null;
     this.handlers = new Map();
+    this.autoReconnect = true;
   }
 
   on(type, handler) {
@@ -22,31 +24,45 @@ class WSClient {
     if (!state.tokens?.access_token || !state.device?.id) {
       return;
     }
+    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    this.autoReconnect = true;
 
     const wsBase = state.settings.serverUrl.replace("http://", "ws://").replace("https://", "wss://");
-    const url = `${wsBase}/ws?token=${encodeURIComponent(state.tokens.access_token)}&device_id=${encodeURIComponent(state.device.id)}`;
-    this.socket = new WebSocket(url);
+    const url = `${wsBase}/ws?device_id=${encodeURIComponent(state.device.id)}`;
+    const protocols = [`access.${state.tokens.access_token}`, `dkey.${getDeviceAuthKey()}`];
+    const socket = new WebSocket(url, protocols);
+    this.socket = socket;
 
-    this.socket.onopen = () => {
+    socket.onopen = () => {
+      if (this.socket !== socket) {
+        return;
+      }
       setState({ wsConnected: true });
       this.emit("open", null);
     };
 
-    this.socket.onclose = () => {
+    socket.onclose = () => {
+      if (this.socket !== socket) {
+        return;
+      }
+      this.socket = null;
       setState({ wsConnected: false });
       this.emit("close", null);
       setTimeout(() => {
-        if (state.tokens?.access_token) {
+        if (this.autoReconnect && !this.socket && state.tokens?.access_token) {
           this.connect();
         }
       }, 2500);
     };
 
-    this.socket.onerror = () => {
+    socket.onerror = () => {
       this.emit("error", new Error("Falha no WebSocket"));
     };
 
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
         this.emit("message", message);
@@ -61,6 +77,7 @@ class WSClient {
 
   disconnect() {
     if (this.socket) {
+      this.autoReconnect = false;
       this.socket.close();
       this.socket = null;
     }

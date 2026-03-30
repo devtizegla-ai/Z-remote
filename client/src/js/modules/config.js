@@ -2,6 +2,7 @@ const SETTINGS_KEY = "ra_mvp_settings";
 const TOKENS_KEY = "ra_mvp_tokens";
 const USER_KEY = "ra_mvp_user";
 const DEVICE_KEY = "ra_mvp_device_id";
+const DEVICE_AUTH_KEY = "ra_mvp_device_auth_key";
 
 export function getDefaultSettings() {
   return {
@@ -65,5 +66,16 @@ export function getDeviceId() {
   const newId = `dev_local_${crypto.randomUUID()}`;
   localStorage.setItem(DEVICE_KEY, newId);
   return newId;
+}
+
+export function getDeviceAuthKey() {
+  const existing = localStorage.getItem(DEVICE_AUTH_KEY);
+  if (existing) {
+    return existing;
+  }
+  const randomChunk = `${crypto.randomUUID()}${crypto.randomUUID().replaceAll("-", "")}`;
+  const newKey = `dkey_${randomChunk}`;
+  localStorage.setItem(DEVICE_AUTH_KEY, newKey);
+  return newKey;
 }
 

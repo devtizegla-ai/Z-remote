@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,6 +58,15 @@ func (s *Store) ExecMigrations(ctx context.Context, migrationsDir string) error 
 		return fmt.Errorf("read migrations dir: %w", err)
 	}
 
+	if _, err := s.DB.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			name TEXT PRIMARY KEY,
+			applied_at DATETIME NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("ensure schema_migrations: %w", err)
+	}
+
+	migrationNames := make([]string, 0, len(files))
 	for _, entry := range files {
 		if entry.IsDir() {
 			continue
@@ -64,14 +74,51 @@ func (s *Store) ExecMigrations(ctx context.Context, migrationsDir string) error 
 		if !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
+		migrationNames = append(migrationNames, entry.Name())
+	}
+	sort.Strings(migrationNames)
 
-		path := filepath.Join(migrationsDir, entry.Name())
+	for _, migrationName := range migrationNames {
+		var appliedCount int
+		if err := s.DB.QueryRowContext(
+			ctx,
+			`SELECT COUNT(1) FROM schema_migrations WHERE name = ?`,
+			migrationName,
+		).Scan(&appliedCount); err != nil {
+			return fmt.Errorf("check migration %s: %w", migrationName, err)
+		}
+		if appliedCount > 0 {
+			continue
+		}
+
+		path := filepath.Join(migrationsDir, migrationName)
 		sqlBytes, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+			return fmt.Errorf("read migration %s: %w", migrationName, err)
 		}
-		if _, err := s.DB.ExecContext(ctx, string(sqlBytes)); err != nil {
-			return fmt.Errorf("exec migration %s: %w", entry.Name(), err)
+
+		tx, err := s.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin migration %s: %w", migrationName, err)
+		}
+
+		if _, err := tx.ExecContext(ctx, string(sqlBytes)); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("exec migration %s: %w", migrationName, err)
+		}
+
+		if _, err := tx.ExecContext(
+			ctx,
+			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
+			migrationName,
+			NowUTC(),
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("record migration %s: %w", migrationName, err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", migrationName, err)
 		}
 	}
 
@@ -90,4 +137,3 @@ func NewID(prefix string) string {
 func NowUTC() time.Time {
 	return time.Now().UTC()
 }
-

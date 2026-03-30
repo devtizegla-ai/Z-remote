@@ -79,4 +79,3 @@ func main() {
 
 	fmt.Printf("Seed created successfully\nEmail: %s\nPassword: %s\nDevice1: %s\nDevice2: %s\n", email, password, device1, device2)
 }
-
