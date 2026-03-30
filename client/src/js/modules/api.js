@@ -11,10 +11,10 @@ export async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${state.tokens.access_token}`;
   }
 
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     ...options,
     headers
-  }, options.timeoutMs || 45000);
+  });
 
   if (!response.ok) {
     let message = `Erro HTTP ${response.status}`;
@@ -39,7 +39,12 @@ export async function apiRequest(path, options = {}) {
   return response.blob();
 }
 
-async function fetchWithTimeout(url, options, timeoutMs) {
+async function fetchWithRetry(url, options) {
+  const timeoutMs = options.timeoutMs || 45000;
+  const retryEnabled = options.retry !== false;
+  const retryAttempts = retryEnabled ? (options.retryAttempts || 2) : 1;
+  const retryDelayMs = options.retryDelayMs || 3500;
+
   async function runOnce() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -50,14 +55,17 @@ async function fetchWithTimeout(url, options, timeoutMs) {
     }
   }
 
-  try {
-    return await runOnce();
-  } catch (error) {
-    if (options.retry === false) {
-      throw error;
+  let lastError;
+  for (let attempt = 1; attempt <= retryAttempts; attempt++) {
+    try {
+      return await runOnce();
+    } catch (error) {
+      lastError = error;
+      if (attempt < retryAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
     }
-    await new Promise((resolve) => setTimeout(resolve, 3500));
-    return runOnce();
   }
+  throw lastError;
 }
 

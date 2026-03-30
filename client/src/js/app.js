@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+﻿import { invoke } from "@tauri-apps/api/core";
 import { apiRequest } from "./modules/api.js";
 import {
   clearTokens,
@@ -12,7 +12,13 @@ import {
   saveUser
 } from "./modules/config.js";
 import { downloadTransfer, uploadSessionFile } from "./modules/files.js";
-import { bindControllerInput, handleSessionSignal, startHostSharing, stopHostSharing, unbindControllerInput } from "./modules/session.js";
+import {
+  bindControllerInput,
+  handleSessionSignal,
+  startHostSharing,
+  stopHostSharing,
+  unbindControllerInput
+} from "./modules/session.js";
 import { setState, state, subscribe } from "./modules/state.js";
 import { createUI } from "./modules/ui.js";
 import { wsClient } from "./modules/ws.js";
@@ -49,7 +55,7 @@ async function bootstrapWithExistingToken() {
     await registerCurrentDevice();
     await refreshDevices();
   } catch (error) {
-    ui.log(`Sessão salva inválida: ${error.message}`);
+    ui.log(`Sessao salva invalida: ${error.message}`);
     logout();
   }
 }
@@ -95,14 +101,14 @@ function bindWSHandlers() {
       return;
     }
     setState({ pendingRequest: request });
-    ui.log(`Solicitação recebida: ${request.id}`);
+    ui.log(`Solicitacao recebida: ${request.id}`);
   });
 
   wsClient.on("session_response", async ({ request }) => {
     if (!request || request.requester_device_id !== state.device?.id) {
       return;
     }
-    ui.log(`Solicitação ${request.id} ${request.status}`);
+    ui.log(`Solicitacao ${request.id} ${request.status}`);
     if (request.status === "accepted") {
       try {
         const started = await apiRequest("/api/sessions/start", {
@@ -114,7 +120,7 @@ function bindWSHandlers() {
         });
         setState({ activeSession: started.remote_session || started.session || null });
       } catch (error) {
-        ui.log(`Falha ao iniciar sessão: ${error.message}`);
+        ui.log(`Falha ao iniciar sessao: ${error.message}`);
       }
     }
   });
@@ -124,7 +130,7 @@ function bindWSHandlers() {
       return;
     }
     setState({ activeSession: session });
-    ui.log(`Sessão ativa: ${session.id}`);
+    ui.log(`Sessao ativa: ${session.id}`);
 
     const isController = session.requester_device_id === state.device?.id;
     if (isController) {
@@ -159,15 +165,14 @@ function bindWSHandlers() {
 
 async function onLogin(event) {
   event.preventDefault();
-  ui.setAuthMessage("Conectando ao servidor...", "info");
-  const serverReady = await checkServerHealth();
-  if (!serverReady) {
-    ui.setAuthMessage("Servidor indisponível no momento. Aguarde e tente novamente.", "error");
-    return;
-  }
+  ui.setAuthMessage("Tentando login (pode levar ate 1 min no Render free)...", "info");
+  await checkServerHealth();
   try {
     const payload = await apiRequest("/api/auth/login", {
       method: "POST",
+      timeoutMs: 25000,
+      retryAttempts: 4,
+      retryDelayMs: 7000,
       body: JSON.stringify({
         email: ui.elements.loginEmail.value.trim(),
         password: ui.elements.loginPassword.value
@@ -192,23 +197,22 @@ async function onLogin(event) {
 
 async function onRegister(event) {
   event.preventDefault();
-  ui.setAuthMessage("Conectando ao servidor...", "info");
-  const serverReady = await checkServerHealth();
-  if (!serverReady) {
-    ui.setAuthMessage("Servidor indisponível no momento. Aguarde e tente novamente.", "error");
-    return;
-  }
+  ui.setAuthMessage("Criando conta (pode levar ate 1 min no Render free)...", "info");
+  await checkServerHealth();
   try {
     await apiRequest("/api/auth/register", {
       method: "POST",
+      timeoutMs: 25000,
+      retryAttempts: 4,
+      retryDelayMs: 7000,
       body: JSON.stringify({
         name: ui.elements.registerName.value.trim(),
         email: ui.elements.registerEmail.value.trim(),
         password: ui.elements.registerPassword.value
       })
     });
-    ui.log("Cadastro concluído. Faça login para continuar.");
-    ui.setAuthMessage("Cadastro concluído. Faça login para continuar.", "success");
+    ui.log("Cadastro concluido. Faca login para continuar.");
+    ui.setAuthMessage("Cadastro concluido. Faca login para continuar.", "success");
     ui.showTab("login");
   } catch (error) {
     const message = humanizeNetworkError(error);
@@ -223,7 +227,7 @@ async function registerCurrentDevice() {
   try {
     runtimeInfo = await invoke("get_runtime_info");
   } catch {
-    // fallback em modo navegador
+    // fallback browser mode
   }
 
   const registered = await apiRequest("/api/devices/register", {
@@ -267,9 +271,9 @@ async function onConnectToDevice(device) {
       })
     });
     const request = response.session_request;
-    ui.log(`Solicitação enviada para ${device.device_name} (${request.id})`);
+    ui.log(`Solicitacao enviada para ${device.device_name} (${request.id})`);
   } catch (error) {
-    ui.log(`Falha ao solicitar conexão: ${error.message}`);
+    ui.log(`Falha ao solicitar conexao: ${error.message}`);
   }
 }
 
@@ -286,9 +290,9 @@ async function onRespondRequest(accept) {
         accept
       })
     });
-    ui.log(`Solicitação ${accept ? "aceita" : "rejeitada"}`);
+    ui.log(`Solicitacao ${accept ? "aceita" : "rejeitada"}`);
   } catch (error) {
-    ui.log(`Erro ao responder solicitação: ${error.message}`);
+    ui.log(`Erro ao responder solicitacao: ${error.message}`);
   } finally {
     setState({ pendingRequest: null });
   }
@@ -327,8 +331,8 @@ function onSaveSettings() {
   saveSettings(updated);
   setState({ settings: updated });
   ui.showSettings(false);
-  ui.log("Configurações salvas");
-  ui.setAuthMessage("Configurações atualizadas.", "success");
+  ui.log("Configuracoes salvas");
+  ui.setAuthMessage("Configuracoes atualizadas.", "success");
   checkServerHealth();
 }
 
@@ -350,7 +354,7 @@ function logout() {
     incomingFiles: []
   });
 
-  ui.log("Sessão encerrada");
+  ui.log("Sessao encerrada");
 }
 
 function startServerHealthMonitor() {
@@ -372,8 +376,7 @@ async function checkServerHealth() {
 function humanizeNetworkError(error) {
   const message = error?.message || String(error);
   if (message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("abort")) {
-    return "Servidor indisponível ou iniciando (Render free pode levar até ~1 min). Tente novamente.";
+    return "Servidor indisponivel ou iniciando (Render free pode levar ate ~1 min). Tente novamente.";
   }
   return message;
 }
-
