@@ -39,6 +39,7 @@ let pendingRemoteFolderRequestTimer = null;
 let remoteFolderCurrentPath = "";
 let remoteFolderParentPath = null;
 let remoteFolderVirtualRoot = false;
+let fileUploadInFlight = false;
 
 setState({
   settings: loadSettings(),
@@ -462,12 +463,16 @@ async function onPickRemoteFolder() {
   ui.elements.remoteFolderModal.classList.remove("hidden");
   ui.elements.remoteFolderPath.textContent = "Carregando estrutura de pastas remotas...";
   ui.elements.remoteFolderList.innerHTML = "";
-  ui.elements.remoteFolderSelectBtn.disabled = true;
-  ui.elements.remoteFolderUpBtn.disabled = true;
+  setRemoteFolderLoading(true);
   await requestRemoteFolderList("");
 }
 
 async function onSendFile() {
+  if (fileUploadInFlight) {
+    ui.log("Ja existe um envio de arquivo em andamento.");
+    return;
+  }
+
   const file = ui.elements.fileInput.files?.[0];
   if (!file) {
     ui.log("Selecione um arquivo antes do envio");
@@ -475,21 +480,34 @@ async function onSendFile() {
   }
 
   const session = state.activeSession;
-  const isController = session && session.requester_device_id === state.device?.id;
-  const targetSavePath = (ui.elements.targetSavePathInput.value || "").trim();
-  if (isController && !targetSavePath) {
-    ui.log("Escolha a pasta remota antes de enviar o arquivo");
+  if (!session) {
+    ui.log("Nenhuma sessao ativa para envio de arquivo");
     return;
   }
 
+  const isController = session && session.requester_device_id === state.device?.id;
+  const targetSavePath = (ui.elements.targetSavePathInput.value || "").trim();
+  const resolvedTargetSavePath = isController ? targetSavePath : "";
+  if (isController && !targetSavePath) {
+    ui.log("Nenhuma pasta remota definida. O arquivo ficara disponivel para download manual no host.");
+  }
+
+  fileUploadInFlight = true;
+  ui.elements.sendFileBtn.disabled = true;
+  ui.elements.fileInput.disabled = true;
   try {
     ui.updateUploadProgress(0);
     await uploadSessionFile(file, (pct) => ui.updateUploadProgress(pct), {
-      targetSavePath: isController ? targetSavePath : ""
+      targetSavePath: resolvedTargetSavePath
     });
+    ui.updateUploadProgress(100);
+    ui.elements.fileInput.value = "";
     ui.log(`Arquivo enviado: ${file.name}`);
   } catch (error) {
     ui.log(`Falha no envio de arquivo: ${error.message}`);
+  } finally {
+    fileUploadInFlight = false;
+    ui.render();
   }
 }
 
@@ -536,6 +554,7 @@ async function handleRemoteFolderSignal(message) {
       return true;
     }
     clearPendingRemoteFolderRequest();
+    setRemoteFolderLoading(false);
 
     if (payload.error) {
       ui.log(`Falha ao navegar em pastas remotas: ${payload.error}`);
@@ -575,6 +594,7 @@ function closeRemoteFolderModal() {
   remoteFolderVirtualRoot = false;
   ui.elements.remoteFolderPath.textContent = "Carregando...";
   ui.elements.remoteFolderList.innerHTML = "";
+  setRemoteFolderLoading(false);
   ui.elements.remoteFolderSelectBtn.disabled = true;
   ui.elements.remoteFolderUpBtn.disabled = true;
 }
@@ -590,9 +610,12 @@ async function requestRemoteFolderList(path) {
   const requestID = `browse_${Date.now()}`;
   clearPendingRemoteFolderRequest();
   pendingRemoteFolderRequestId = requestID;
+  setRemoteFolderLoading(true);
+  ui.elements.remoteFolderPath.textContent = "Carregando estrutura de pastas remotas...";
   pendingRemoteFolderRequestTimer = setTimeout(() => {
     if (pendingRemoteFolderRequestId === requestID) {
       clearPendingRemoteFolderRequest();
+      setRemoteFolderLoading(false);
       ui.log("Tempo esgotado ao carregar pastas remotas.");
     }
   }, 30000);
@@ -612,6 +635,7 @@ function renderRemoteFolderListing(listing) {
   ui.elements.remoteFolderPath.textContent = remoteFolderVirtualRoot
     ? "Raizes do sistema remoto"
     : remoteFolderCurrentPath || "Pasta remota";
+  setRemoteFolderLoading(false);
   ui.elements.remoteFolderUpBtn.disabled = remoteFolderParentPath === null;
   ui.elements.remoteFolderSelectBtn.disabled = remoteFolderVirtualRoot || !remoteFolderCurrentPath;
 
@@ -634,6 +658,14 @@ function renderRemoteFolderListing(listing) {
       requestRemoteFolderList(entry.path || "");
     });
     ui.elements.remoteFolderList.appendChild(button);
+  }
+}
+
+function setRemoteFolderLoading(loading) {
+  ui.elements.remoteFolderRefreshBtn.disabled = loading;
+  if (loading) {
+    ui.elements.remoteFolderUpBtn.disabled = true;
+    ui.elements.remoteFolderSelectBtn.disabled = true;
   }
 }
 

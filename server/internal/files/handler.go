@@ -8,6 +8,11 @@ import (
 	"remoteaccess/server/internal/sessions"
 )
 
+const (
+	multipartMemoryLimit int64 = 32 << 20
+	requestOverheadBytes int64 = 1 << 20
+)
+
 type Handler struct {
 	service *Service
 }
@@ -28,9 +33,23 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	maxRequestBytes := h.service.MaxFileBytes() + requestOverheadBytes
+	if maxRequestBytes < requestOverheadBytes {
+		maxRequestBytes = requestOverheadBytes
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+
+	if err := r.ParseMultipartForm(multipartMemoryLimit); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			apphttp.WriteError(w, http.StatusRequestEntityTooLarge, ErrFileTooLarge.Error())
+			return
+		}
 		apphttp.WriteError(w, http.StatusBadRequest, "invalid multipart form")
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 
 	sessionID := r.FormValue("session_id")
@@ -98,7 +117,7 @@ func (h *Handler) handleError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrTransferNotFound):
 		apphttp.WriteError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, ErrFileTooLarge):
-		apphttp.WriteError(w, http.StatusBadRequest, err.Error())
+		apphttp.WriteError(w, http.StatusRequestEntityTooLarge, err.Error())
 	case errors.Is(err, sessions.ErrSessionUnauthorized):
 		apphttp.WriteError(w, http.StatusForbidden, err.Error())
 	default:

@@ -37,18 +37,7 @@ export async function apiRequest(path, options = {}) {
       // ignore body parse errors
     }
 
-    if (
-      shouldRecoverFromInvalidDeviceAuth(message, normalizedPath, options) &&
-      invalidDeviceAuthHandler
-    ) {
-      if (!invalidDeviceAuthRecoveryInFlight) {
-        invalidDeviceAuthRecoveryInFlight = true;
-        try {
-          await invalidDeviceAuthHandler(message);
-        } finally {
-          invalidDeviceAuthRecoveryInFlight = false;
-        }
-      }
+    if (await recoverInvalidDeviceAuth(message, normalizedPath, options)) {
       return apiRequest(path, {
         ...options,
         __deviceAuthRetried: true
@@ -98,6 +87,26 @@ async function fetchWithRetry(url, options) {
     }
   }
   throw lastError;
+}
+
+export async function recoverInvalidDeviceAuth(message, path, options = {}) {
+  if (
+    !shouldRecoverFromInvalidDeviceAuth(message, path, options) ||
+    !invalidDeviceAuthHandler
+  ) {
+    return false;
+  }
+
+  if (!invalidDeviceAuthRecoveryInFlight) {
+    invalidDeviceAuthRecoveryInFlight = true;
+    try {
+      await invalidDeviceAuthHandler(message);
+    } finally {
+      invalidDeviceAuthRecoveryInFlight = false;
+    }
+  }
+
+  return true;
 }
 
 function shouldRecoverFromInvalidDeviceAuth(message, path, options) {

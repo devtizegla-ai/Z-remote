@@ -2,6 +2,13 @@
 import { state } from "./state.js";
 import { wsClient } from "./ws.js";
 
+const NATIVE_CAPTURE_INTERVAL_MS = 180;
+const BROWSER_CAPTURE_INTERVAL_MS = 220;
+const NATIVE_CAPTURE_QUALITY = 58;
+const BROWSER_CAPTURE_QUALITY = 0.58;
+const MAX_CAPTURE_WIDTH = 1600;
+const MAX_CAPTURE_HEIGHT = 900;
+
 const runtime = {
   stream: null,
   video: null,
@@ -34,20 +41,20 @@ export async function startHostSharing(log, options = {}) {
 async function tryStartNativeCapture(log) {
   try {
     // probe command availability and screen access
-    await invoke("capture_primary_screen_jpeg", { quality: 60 });
+    await invoke("capture_primary_screen_jpeg", { quality: NATIVE_CAPTURE_QUALITY });
   } catch {
     return false;
   }
 
   runtime.mode = "native";
   runtime.timer = setInterval(async () => {
-    if (!state.activeSession || runtime.captureInFlight) {
+    if (!state.activeSession || !state.wsConnected || runtime.captureInFlight) {
       return;
     }
 
     runtime.captureInFlight = true;
     try {
-      const imageData = await invoke("capture_primary_screen_jpeg", { quality: 60 });
+      const imageData = await invoke("capture_primary_screen_jpeg", { quality: NATIVE_CAPTURE_QUALITY });
       wsClient.sendSessionSignal("frame", {
         image_data: imageData,
         width: 0,
@@ -71,7 +78,7 @@ async function tryStartNativeCapture(log) {
     } finally {
       runtime.captureInFlight = false;
     }
-  }, 160);
+  }, NATIVE_CAPTURE_INTERVAL_MS);
 
   log("Compartilhamento de tela iniciado automaticamente (captura nativa da tela inteira)");
   return true;
@@ -93,24 +100,43 @@ async function startBrowserCapture(log) {
 
   runtime.mode = "browser";
   runtime.timer = setInterval(() => {
-    if (!state.activeSession || !ctx || !runtime.video) {
+    if (
+      !state.activeSession ||
+      !state.wsConnected ||
+      !ctx ||
+      !runtime.video ||
+      runtime.captureInFlight ||
+      document.hidden
+    ) {
       return;
     }
 
-    const width = Math.max(960, runtime.video.videoWidth || 960);
-    const height = Math.max(540, runtime.video.videoHeight || 540);
-    runtime.canvas.width = width;
-    runtime.canvas.height = height;
-    ctx.drawImage(runtime.video, 0, 0, width, height);
+    const sourceWidth = runtime.video.videoWidth || 0;
+    const sourceHeight = runtime.video.videoHeight || 0;
+    if (!sourceWidth || !sourceHeight) {
+      return;
+    }
 
-    const imageData = runtime.canvas.toDataURL("image/jpeg", 0.62);
-    wsClient.sendSessionSignal("frame", {
-      image_data: imageData,
-      width,
-      height,
-      ts: Date.now()
-    });
-  }, 220);
+    runtime.captureInFlight = true;
+    try {
+      const { width, height } = resolveCaptureDimensions(sourceWidth, sourceHeight);
+      if (runtime.canvas.width !== width || runtime.canvas.height !== height) {
+        runtime.canvas.width = width;
+        runtime.canvas.height = height;
+      }
+      ctx.drawImage(runtime.video, 0, 0, width, height);
+
+      const imageData = runtime.canvas.toDataURL("image/jpeg", BROWSER_CAPTURE_QUALITY);
+      wsClient.sendSessionSignal("frame", {
+        image_data: imageData,
+        width,
+        height,
+        ts: Date.now()
+      });
+    } finally {
+      runtime.captureInFlight = false;
+    }
+  }, BROWSER_CAPTURE_INTERVAL_MS);
 
   runtime.stream.getVideoTracks()[0].addEventListener("ended", () => {
     stopHostSharing(log);
@@ -273,4 +299,11 @@ function isPrintableInputKey(event) {
   const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
   const hasBlockingModifier = event.ctrlKey || event.metaKey || (event.altKey && !altGraph);
   return !hasBlockingModifier;
+}
+
+function resolveCaptureDimensions(sourceWidth, sourceHeight) {
+  const scale = Math.min(MAX_CAPTURE_WIDTH / sourceWidth, MAX_CAPTURE_HEIGHT / sourceHeight, 1);
+  const width = Math.max(640, Math.round(sourceWidth * scale));
+  const height = Math.max(360, Math.round(sourceHeight * scale));
+  return { width, height };
 }

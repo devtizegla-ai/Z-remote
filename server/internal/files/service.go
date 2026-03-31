@@ -23,6 +23,8 @@ var (
 	ErrFileTooLarge     = errors.New("file exceeds allowed size")
 )
 
+const defaultMaxFileBytes int64 = 10 * 1024 * 1024
+
 type Notifier interface {
 	NotifyDevice(deviceID string, payload any) error
 }
@@ -50,6 +52,13 @@ func (s *Service) SetNotifier(notifier Notifier) {
 	s.notifier = notifier
 }
 
+func (s *Service) MaxFileBytes() int64 {
+	if s.maxFileBytes <= 0 {
+		return defaultMaxFileBytes
+	}
+	return s.maxFileBytes
+}
+
 type UploadInput struct {
 	UserID         string
 	FromDeviceID   string
@@ -63,11 +72,12 @@ type UploadInput struct {
 
 func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTransfer, error) {
 	defer input.Reader.Close()
+	maxFileBytes := s.MaxFileBytes()
 
 	if input.Header == nil {
 		return models.FileTransfer{}, fmt.Errorf("missing file")
 	}
-	if input.Header.Size > s.maxFileBytes {
+	if input.Header.Size > maxFileBytes {
 		return models.FileTransfer{}, ErrFileTooLarge
 	}
 
@@ -101,11 +111,11 @@ func (s *Service) Upload(ctx context.Context, input UploadInput) (models.FileTra
 	}
 	defer targetFile.Close()
 
-	written, err := io.Copy(targetFile, io.LimitReader(input.Reader, s.maxFileBytes+1))
+	written, err := io.Copy(targetFile, io.LimitReader(input.Reader, maxFileBytes+1))
 	if err != nil {
 		return models.FileTransfer{}, err
 	}
-	if written > s.maxFileBytes {
+	if written > maxFileBytes {
 		_ = os.Remove(storagePath)
 		return models.FileTransfer{}, ErrFileTooLarge
 	}

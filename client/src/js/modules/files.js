@@ -1,35 +1,51 @@
 ﻿import { invoke } from "@tauri-apps/api/core";
+import { recoverInvalidDeviceAuth } from "./api.js";
 import { getDeviceAuthKey, getDeviceId, normalizeServerUrl } from "./config.js";
 import { state } from "./state.js";
 
 const UPLOAD_ATTEMPTS = 3;
 const DOWNLOAD_ATTEMPTS = 3;
+const FILE_UPLOAD_PATH = "/api/files/upload";
+const FILE_DOWNLOAD_PATH = "/api/files/download";
 
 export async function uploadSessionFile(file, onProgress, options = {}) {
-  if (!state.activeSession) {
+  const session = state.activeSession;
+  if (!session) {
     throw new Error("Nenhuma sessao ativa");
+  }
+  if (!state.device?.id) {
+    throw new Error("Identidade de dispositivo indisponivel");
   }
 
   const peerDeviceId =
-    state.activeSession.requester_device_id === state.device.id
-      ? state.activeSession.target_device_id
-      : state.activeSession.requester_device_id;
+    session.requester_device_id === state.device.id ? session.target_device_id : session.requester_device_id;
+  const uploadContext = {
+    sessionId: session.id,
+    sessionToken: session.session_token,
+    fromDeviceId: state.device.id,
+    toDeviceId: peerDeviceId
+  };
 
-  const form = new FormData();
-  form.append("session_id", state.activeSession.id);
-  form.append("session_token", state.activeSession.session_token);
-  form.append("from_device_id", state.device.id);
-  form.append("to_device_id", peerDeviceId);
-  form.append("target_save_path", String(options.targetSavePath || "").trim());
-  form.append("file", file);
+  const safeProgress = typeof onProgress === "function" ? onProgress : () => {};
+  let invalidDeviceAuthRetried = false;
 
   for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
     try {
-      return await uploadOnce(form, onProgress);
+      const form = buildUploadForm(file, uploadContext, options.targetSavePath);
+      return await uploadOnce(form, safeProgress);
     } catch (error) {
+      const cause = error?.cause || error;
+      const recovered = await recoverInvalidDeviceAuth(cause?.message || String(cause || ""), FILE_UPLOAD_PATH, {
+        __deviceAuthRetried: invalidDeviceAuthRetried
+      });
+      if (recovered) {
+        invalidDeviceAuthRetried = true;
+        continue;
+      }
+
       const retryable = Boolean(error?.retryable);
       if (!retryable || attempt === UPLOAD_ATTEMPTS) {
-        throw error?.cause || error;
+        throw cause;
       }
       await delay(900 * attempt);
     }
@@ -39,7 +55,8 @@ export async function uploadSessionFile(file, onProgress, options = {}) {
 }
 
 export async function downloadTransfer(transferId, options = {}) {
-  const url = `${buildApiUrl("/api/files/download")}?transfer_id=${encodeURIComponent(transferId)}`;
+  const url = `${buildApiUrl(FILE_DOWNLOAD_PATH)}?transfer_id=${encodeURIComponent(transferId)}`;
+  let invalidDeviceAuthRetried = false;
 
   let response = null;
   for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
@@ -67,14 +84,23 @@ export async function downloadTransfer(transferId, options = {}) {
       break;
     }
 
+    let message = `Erro no download (${response.status})`;
+    try {
+      const payload = await response.json();
+      message = payload.error || message;
+    } catch {
+      // ignore parse errors
+    }
+
+    const recovered = await recoverInvalidDeviceAuth(message, FILE_DOWNLOAD_PATH, {
+      __deviceAuthRetried: invalidDeviceAuthRetried
+    });
+    if (recovered) {
+      invalidDeviceAuthRetried = true;
+      continue;
+    }
+
     if (!isRetryableStatus(response.status) || attempt === DOWNLOAD_ATTEMPTS) {
-      let message = `Erro no download (${response.status})`;
-      try {
-        const payload = await response.json();
-        message = payload.error || message;
-      } catch {
-        // ignore parse errors
-      }
       throw new Error(message);
     }
 
@@ -128,7 +154,7 @@ export async function downloadTransfer(transferId, options = {}) {
 function uploadOnce(form, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", buildApiUrl("/api/files/upload"));
+    xhr.open("POST", buildApiUrl(FILE_UPLOAD_PATH));
     xhr.timeout = 45000;
     xhr.setRequestHeader("Authorization", `Bearer ${state.tokens.access_token}`);
     xhr.setRequestHeader("X-Device-ID", getDeviceId());
@@ -171,6 +197,17 @@ function uploadOnce(form, onProgress) {
     xhr.onabort = () => reject({ retryable: true, cause: new Error("Upload interrompido") });
     xhr.send(form);
   });
+}
+
+function buildUploadForm(file, uploadContext, targetSavePath) {
+  const form = new FormData();
+  form.append("session_id", uploadContext.sessionId);
+  form.append("session_token", uploadContext.sessionToken);
+  form.append("from_device_id", uploadContext.fromDeviceId);
+  form.append("to_device_id", uploadContext.toDeviceId);
+  form.append("target_save_path", String(targetSavePath || "").trim());
+  form.append("file", file);
+  return form;
 }
 
 function parseDownloadFilename(disposition) {
